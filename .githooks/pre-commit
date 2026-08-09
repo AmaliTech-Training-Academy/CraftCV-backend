@@ -1,0 +1,19 @@
+#!/bin/sh
+
+set -eu
+
+repo_root=$(git rev-parse --show-toplevel)
+branch=$(git symbolic-ref --quiet --short HEAD || true)
+
+if [ -n "$branch" ]; then
+  if [ "$branch" = "main" ]; then
+    printf '%s\n' "Direct commits to main are not allowed. Create a typed branch first." >&2
+    exit 1
+  fi
+  sh "$repo_root/scripts/validate-conventions.sh" branch "$branch"
+fi
+
+git diff --cached --check
+
+# Once a backend stack is selected, its canonical check command should be added
+# here and to the GitHub Actions workflow.
