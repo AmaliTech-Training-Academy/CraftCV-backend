@@ -1,0 +1,8 @@
+#!/bin/sh
+
+set -eu
+
+repo_root=$(git rev-parse --show-toplevel)
+subject=$(sed -n '1p' "$1")
+
+sh "$repo_root/scripts/validate-conventions.sh" commit "$subject"
