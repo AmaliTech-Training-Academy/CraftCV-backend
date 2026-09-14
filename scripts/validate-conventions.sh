@@ -55,9 +55,20 @@ EOF
 }
 
 commit_help() {
+  subject_kind=${1:-commit}
+
+  if [ "$subject_kind" = "pr-title" ]; then
+    remedy='Rename the pull request on GitHub. GitHub titles a pull request from
+the branch name by default, which is never a valid subject.'
+  else
+    remedy='Amend the last commit with:
+
+    git commit --amend'
+  fi
+
   cat >&2 <<EOF
 
-Commit subjects must be:
+Subjects must be:
 
     <type>(optional-scope): <description>          (72 characters max)
 
@@ -74,9 +85,7 @@ Commit subjects must be:
 
 Allowed types: $(printf '%s' "$commit_types" | tr '|' ' ')
 
-Amend the last commit with:
-
-    git commit --amend
+$remedy
 
 See CONTRIBUTING.md.
 EOF
@@ -96,6 +105,13 @@ validate_branch() {
 
 validate_commit() {
   subject=$1
+  kind=${2:-commit}
+
+  if [ "$kind" = "pr-title" ]; then
+    label='pull request title'
+  else
+    label='commit subject'
+  fi
 
   # Git-generated subjects are allowed. Pull requests should normally be squash merged.
   case "$subject" in
@@ -103,24 +119,27 @@ validate_commit() {
   esac
 
   if [ "${#subject}" -gt 72 ]; then
-    printf 'Commit subject is %s characters, the limit is 72:\n  %s\n' \
-      "${#subject}" "$subject" >&2
-    commit_help
+    printf 'The %s is %s characters, the limit is 72:\n  %s\n' \
+      "$label" "${#subject}" "$subject" >&2
+    commit_help "$kind"
     exit 1
   fi
 
   printf '%s\n' "$subject" | grep -Eq "$commit_pattern" && return 0
 
-  printf 'Invalid commit subject: %s\n' "'$subject'" >&2
-  commit_help
+  printf 'Invalid %s: %s\n' "$label" "'$subject'" >&2
+  commit_help "$kind"
   exit 1
 }
 
-[ "$#" -eq 2 ] || fail "Usage: $0 branch <name> | commit <subject> | is-protected <name>"
+[ "$#" -ge 2 ] ||
+  fail "Usage: $0 branch <name> | commit <subject> [pr-title] | is-protected <name>"
 
 case "$1" in
   branch) validate_branch "$2" ;;
-  commit) validate_commit "$2" ;;
+  # The optional third argument tailors the advice: a pull request title is
+  # renamed on GitHub, not amended with git.
+  commit) validate_commit "$2" "${3:-commit}" ;;
   # Exits 0 when the branch is protected, 1 otherwise. Prints nothing.
   is-protected) is_protected "$2" ;;
   *) fail "Unknown validation type '$1'." ;;
