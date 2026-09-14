@@ -2,8 +2,14 @@
 django==6.1.1
 djangorestframework==3.18.1
 
+# Database
+psycopg[binary]==3.3.5
+
 # API Documentation
 drf-spectacular==0.28.0
+
+# Production WSGI server, used by the Docker image
+gunicorn==26.2.0
 
 # Development Tools
 django-debug-toolbar==8.0.0

@@ -15,6 +15,8 @@ local development.
 
 - Python 3.12 (the version CI runs and the linter targets)
 - pip and `venv`
+- PostgreSQL 17 for a full local stack, or Docker to run it through
+  `compose.yaml`
 
 ## Getting started
 
@@ -61,6 +63,10 @@ if you only plan to run the server. Settings are read from `.env` through
 for anything beyond a throwaway local database. `.env` is git-ignored and must
 never be committed.
 
+`.env.example` points at Postgres. If you would rather not run a database
+server, set `DB_ENGINE=django.db.backends.sqlite3` — that is also what the test
+suite and CI use.
+
 Apply migrations and start the development server:
 
 ```sh
@@ -96,6 +102,8 @@ craftcv_backend/
 ├── tests/                # Repository-level tests (the convention rules)
 ├── .githooks/            # pre-commit, commit-msg, pre-push
 ├── .github/workflows/    # CI and repository-standards
+├── Dockerfile            # Application image (gunicorn)
+├── compose.yaml          # Local stack: app + postgres
 ├── manage.py
 ├── pyproject.toml        # ruff configuration
 ├── requirements.txt
@@ -104,6 +112,35 @@ craftcv_backend/
 
 New apps live under `apps/` and are registered in `INSTALLED_APPS` with their
 dotted path (for example `apps.users`).
+
+## Running with Docker
+
+The compose stack is the quickest way to get a real Postgres. It builds the
+image, starts the database, waits for it to be healthy, and mounts the source
+so edits reload without a rebuild:
+
+```sh
+docker compose up --build
+docker compose exec web python manage.py migrate
+```
+
+The app is then on <http://localhost:8000>. Other things you will want:
+
+```sh
+docker compose exec web python manage.py createsuperuser
+docker compose exec web python manage.py test
+docker compose down            # stop, keeping the database volume
+docker compose down -v         # stop and delete the database
+```
+
+Compose reads the same `.env` the app does, so `DB_NAME`, `DB_USER` and
+`DB_PASSWORD` create the database and configure Django from one place. Set
+`DB_HOST_PORT` or `WEB_PORT` if 5432 or 8000 is already taken. `DB_HOST` is
+fixed to the `db` service inside the network, so the value in your `.env` only
+affects commands you run on the host.
+
+The image runs gunicorn as its default command and compose overrides it with
+`runserver` for development, so the same `Dockerfile` serves both.
 
 ## Quality checks
 
@@ -170,6 +207,8 @@ are not mistaken for finished configuration:
 - No static type checking.
 - No production settings module; `DEBUG` defaults to off and is turned on
   through `.env` for local work.
+- The test suite runs on SQLite while the application targets Postgres, so
+  database-specific behaviour is not covered by CI.
 
 ## Contributing
 

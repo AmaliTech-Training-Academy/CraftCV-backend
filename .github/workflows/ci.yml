@@ -54,3 +54,17 @@ jobs:
 
       - name: Test
         run: sh scripts/check.sh test
+
+  docker:
+    name: docker
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      # Building on every pull request keeps the image from rotting unnoticed.
+      - name: Build the image
+        run: docker build --tag craftcv-backend:ci .
+
+      - name: Django system checks inside the image
+        run: docker run --rm craftcv-backend:ci python manage.py check
