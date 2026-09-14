@@ -79,12 +79,8 @@ WSGI_APPLICATION = 'craftcv.wsgi.application'
 
 DATABASES = {
     'default': {
-        'USER': os.getenv("DB_USER"),
-        'PASSWORD': os.getenv("DB_PASSWORD"),
-        'USER': os.getenv("DB_USER"),
         'ENGINE': os.getenv("DB_ENGINE"),
-        'NAME': os.getenv("DB_NAME"),
-        'PORT': os.getenv("DB_PORT")
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
 

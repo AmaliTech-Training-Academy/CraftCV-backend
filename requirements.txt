@@ -2,9 +2,6 @@
 django==6.1.1
 djangorestframework==3.18.1
 
-# Database Drivers
-mysqlclient==2.2.8
-
 # API Documentation
 drf-spectacular==0.28.0
 
