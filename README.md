@@ -111,10 +111,11 @@ dotted path (for example `apps.users`).
 GitHub Actions both call it, so local and CI results cannot drift.
 
 ```sh
-sh scripts/check.sh lint     # ruff lint + format check
-sh scripts/check.sh build    # django system checks + missing migrations
-sh scripts/check.sh test     # django unit tests
-sh scripts/check.sh all      # all of the above
+sh scripts/check.sh lint            # ruff lint + format check
+sh scripts/check.sh tests-required  # staged code must ship with a test
+sh scripts/check.sh build           # django system checks + missing migrations
+sh scripts/check.sh test            # django unit tests
+sh scripts/check.sh all             # lint, build and test
 ```
 
 It finds `venv/` (or `.venv/`) on its own; set `PYTHON=/path/to/python` to
@@ -124,14 +125,23 @@ When to expect each one:
 
 | Moment | What runs |
 | --- | --- |
-| `git commit` | Branch and subject conventions, whitespace, and **lint on staged Python files** |
+| `git commit` | Branch and subject conventions, whitespace, **lint on staged Python files**, and **a test alongside any staged application code** |
 | `git push` | The same conventions, then **build and unit tests** |
 | Pull request / push to `main`, `develop` | Lint, build, and tests again in GitHub Actions |
 
 Lint runs on commit because it is fast; the slower build and test run once per
 push. Fix lint failures with `python -m ruff check --fix .` and
-`python -m ruff format .`. For an emergency push, `SKIP_PUSH_CHECKS=1 git push`
-skips the build and tests — CI still runs them.
+`python -m ruff format .`.
+
+A commit that touches application code without staging a test is rejected. Put
+the test in `apps/<app>/tests.py` or `tests/test_*.py` and stage it in the same
+commit. Migrations, `__init__.py`, `apps.py`, `asgi.py`, `wsgi.py`, `manage.py`
+and `craftcv/settings.py` are exempt, and so is anything that is not Python.
+When a change genuinely has nothing to assert, say so out loud with
+`SKIP_TEST_CHECK=1 git commit`.
+
+For an emergency push, `SKIP_PUSH_CHECKS=1 git push` skips the build and tests
+— CI still runs them.
 
 Linter and formatter rules live in `pyproject.toml` (ruff, line length 100).
 
@@ -141,9 +151,10 @@ Linter and formatter rules live in `pyproject.toml` (ruff, line length 100).
 python manage.py test
 ```
 
-`craftcv/tests.py` holds smoke tests for the URL wiring and
-`tests/test_conventions.py` covers `scripts/validate-conventions.sh`, the rules
-the Git hooks enforce. Feature tests belong in the app that owns the behaviour.
+`craftcv/tests.py` holds smoke tests for the URL wiring, and `tests/` covers
+the rules the Git hooks enforce: `test_conventions.py` for
+`scripts/validate-conventions.sh` and `test_check_script.py` for the
+tests-required gate. Feature tests belong in the app that owns the behaviour.
 `settings.py` detects test runs and skips loading the debug toolbar.
 
 The convention tests shell out to the script once per case, which is slow on
