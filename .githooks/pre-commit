@@ -19,3 +19,7 @@ git diff --cached --check
 
 # Lint is fast, so it runs on every commit. Tests and the build run on push.
 sh "$repo_root/scripts/check.sh" lint --staged
+
+# A behaviour change without a test is rejected here, while the code is still
+# in front of the author. SKIP_TEST_CHECK=1 is the deliberate way out.
+sh "$repo_root/scripts/check.sh" tests-required

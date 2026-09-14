@@ -148,12 +148,90 @@ run_test() {
   "$python_bin" manage.py test
 }
 
-[ "$#" -ge 1 ] || fail "Usage: $0 lint [--staged] | build | test | all"
+# A change to these needs no test of its own: generated code, packaging stubs,
+# and configuration with no behaviour to assert.
+test_exempt() {
+  case "$1" in
+    */migrations/*) return 0 ;;
+    manage.py | */__init__.py | */apps.py | */asgi.py | */wsgi.py) return 0 ;;
+    craftcv/settings.py) return 0 ;;
+  esac
+  return 1
+}
+
+is_test_file() {
+  case "$1" in
+    tests/* | */tests/* | tests.py | */tests.py) return 0 ;;
+    test_*.py | */test_*.py | *_test.py | */*_test.py) return 0 ;;
+  esac
+  return 1
+}
+
+# Fails when application code is staged without a test alongside it. Pass paths
+# to check an explicit list; with no arguments the staged files are used.
+run_tests_required() {
+  if [ "${SKIP_TEST_CHECK:-0}" = "1" ]; then
+    step 'tests-required: skipped by SKIP_TEST_CHECK=1'
+    return 0
+  fi
+
+  if [ "$#" -eq 0 ]; then
+    set -- $(git diff --cached --name-only --diff-filter=ACMR -- '*.py')
+  fi
+
+  untested=''
+  saw_test=0
+
+  for path in "$@"; do
+    case "$path" in *.py) ;; *) continue ;; esac
+
+    if is_test_file "$path"; then
+      saw_test=1
+      continue
+    fi
+
+    test_exempt "$path" && continue
+
+    untested="$untested  $path
+"
+  done
+
+  if [ -z "$untested" ] || [ "$saw_test" -eq 1 ]; then
+    step 'tests-required: ok'
+    return 0
+  fi
+
+  cat >&2 <<EOF
+
+Application code is staged with no test in the same commit:
+
+$untested
+Every behaviour change needs a unit test. Add or update one of:
+
+  apps/<app>/tests.py     tests for that app
+  tests/test_*.py         repository-level tests
+
+Then stage it and commit again. Run the suite with:
+
+    sh scripts/check.sh test
+
+If this change genuinely has nothing to assert, say so explicitly:
+
+    SKIP_TEST_CHECK=1 git commit ...
+
+See CONTRIBUTING.md.
+EOF
+  exit 1
+}
+
+[ "$#" -ge 1 ] ||
+  fail "Usage: $0 lint [--staged] | tests-required [path...] | build | test | all"
 
 case "$1" in
   lint) shift; run_lint "$@" ;;
+  tests-required) shift; run_tests_required "$@" ;;
   build) run_build ;;
   test) run_test ;;
   all) run_lint; run_build; run_test ;;
-  *) fail "Unknown check '$1'. Use lint, build, test, or all." ;;
+  *) fail "Unknown check '$1'. Use lint, tests-required, build, test, or all." ;;
 esac

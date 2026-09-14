@@ -79,7 +79,7 @@ Three hooks then run automatically:
 
 | Hook | Checks |
 | --- | --- |
-| `pre-commit` | Blocks commits on `main` and `develop`, validates the current branch name, runs Git's whitespace/error checks, and **lints the staged Python files** |
+| `pre-commit` | Blocks commits on `main` and `develop`, validates the current branch name, runs Git's whitespace/error checks, **lints the staged Python files**, and **requires a test alongside staged application code** |
 | `commit-msg` | Validates the commit subject |
 | `pre-push` | Re-validates the branch name and every commit subject being pushed, then runs the **build and the unit tests** |
 
@@ -87,9 +87,10 @@ Lint runs on commit because it is fast. The build and the test suite run once
 per push instead, through the same entry point CI uses:
 
 ```sh
-sh scripts/check.sh lint     # ruff lint + format check
-sh scripts/check.sh build    # django system checks + missing migrations
-sh scripts/check.sh test     # django unit tests
+sh scripts/check.sh lint            # ruff lint + format check
+sh scripts/check.sh tests-required  # staged code must ship with a test
+sh scripts/check.sh build           # django system checks + missing migrations
+sh scripts/check.sh test            # django unit tests
 sh scripts/check.sh all
 ```
 
@@ -111,6 +112,25 @@ build, and tests. Repository administrators should also protect the default
 branch by requiring pull requests, approvals, and the `repository-standards`,
 `lint`, and `build-and-test` status checks, and by blocking force pushes and
 deletion.
+
+## Tests come with the change
+
+A commit that stages application code without staging a test is rejected. Write
+the test in `apps/<app>/tests.py`, `apps/<app>/tests/test_*.py`, or `tests/` for
+repository-level rules, and stage it in the same commit.
+
+Exempt, because there is no behaviour to assert: migrations, `__init__.py`,
+`apps.py`, `asgi.py`, `wsgi.py`, `manage.py`, `craftcv/settings.py`, and every
+non-Python file.
+
+The gate looks at file names, not at coverage, so it cannot tell a real test
+from an empty one. It is a reminder, not a substitute for review: a reviewer
+should still ask whether the test asserts the behaviour that changed. When a
+change genuinely has nothing to assert, make that a deliberate, visible choice:
+
+```sh
+SKIP_TEST_CHECK=1 git commit
+```
 
 ## The stack
 
