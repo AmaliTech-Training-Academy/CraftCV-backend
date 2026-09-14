@@ -93,6 +93,7 @@ craftcv_backend/
 │   ├── asgi.py
 │   └── wsgi.py
 ├── scripts/              # check.sh, hook installers, convention checks
+├── tests/                # Repository-level tests (the convention rules)
 ├── .githooks/            # pre-commit, commit-msg, pre-push
 ├── .github/workflows/    # CI and repository-standards
 ├── manage.py
@@ -140,9 +141,14 @@ Linter and formatter rules live in `pyproject.toml` (ruff, line length 100).
 python manage.py test
 ```
 
-`craftcv/tests.py` holds smoke tests for the URL wiring; feature tests belong in
-the app that owns the behaviour. `settings.py` detects test runs and skips
-loading the debug toolbar.
+`craftcv/tests.py` holds smoke tests for the URL wiring and
+`tests/test_conventions.py` covers `scripts/validate-conventions.sh`, the rules
+the Git hooks enforce. Feature tests belong in the app that owns the behaviour.
+`settings.py` detects test runs and skips loading the debug toolbar.
+
+The convention tests shell out to the script once per case, which is slow on
+Windows (roughly 20 seconds) and quick on Linux. Run a subset with
+`python manage.py test tests` or `python manage.py test craftcv`.
 
 ## Known gaps
 

@@ -64,7 +64,9 @@ characters. Keep commits small, buildable, and free of unrelated formatting.
 
 ## Pull requests
 
-- Use a Conventional Commit title; squash-merging will make it the final commit.
+- Use a Conventional Commit title; squash-merging will make it the final commit
+  subject, and nothing in CI checks it for you. GitHub titles a pull request
+  from the branch name by default, so this almost always needs editing.
 - Explain what changed, why it changed, and how it was tested.
 - Link the relevant issue and call out migrations or breaking changes.
 - Keep pull requests focused and request review only after checks pass.
