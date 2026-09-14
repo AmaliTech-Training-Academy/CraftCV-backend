@@ -17,5 +17,5 @@ fi
 
 git diff --cached --check
 
-# Once the project has a canonical check command, add it here and to the GitHub
-# Actions workflow.
+# Lint is fast, so it runs on every commit. Tests and the build run on push.
+sh "$repo_root/scripts/check.sh" lint --staged

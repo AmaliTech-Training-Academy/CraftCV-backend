@@ -77,9 +77,24 @@ Three hooks then run automatically:
 
 | Hook | Checks |
 | --- | --- |
-| `pre-commit` | Blocks commits on `main` and `develop`, validates the current branch name, and runs Git's whitespace/error checks on staged changes |
+| `pre-commit` | Blocks commits on `main` and `develop`, validates the current branch name, runs Git's whitespace/error checks, and **lints the staged Python files** |
 | `commit-msg` | Validates the commit subject |
-| `pre-push` | Re-validates the branch name and every commit subject being pushed |
+| `pre-push` | Re-validates the branch name and every commit subject being pushed, then runs the **build and the unit tests** |
+
+Lint runs on commit because it is fast. The build and the test suite run once
+per push instead, through the same entry point CI uses:
+
+```sh
+sh scripts/check.sh lint     # ruff lint + format check
+sh scripts/check.sh build    # django system checks + missing migrations
+sh scripts/check.sh test     # django unit tests
+sh scripts/check.sh all
+```
+
+Install `requirements-dev.txt` or the hooks will stop with instructions. Lint
+failures are mostly fixable with `python -m ruff check --fix .` and
+`python -m ruff format .`. `SKIP_PUSH_CHECKS=1 git push` skips the build and
+tests for an emergency push; CI still runs them.
 
 `pre-push` is the backstop: a branch missing its `crf-<number>` ticket
 reference, or a commit subject that skipped `commit-msg` via `--no-verify`,
@@ -88,20 +103,29 @@ branch deletions, are not blocked. Every rule lives in
 `scripts/validate-conventions.sh`, which prints correct and incorrect examples
 on failure; change the `ticket_key` variable there if the project key changes.
 
-Hooks improve local feedback but can be bypassed. The GitHub workflow repeats
-the convention checks for pull requests. Repository administrators should also
-protect `main` by requiring pull requests, approvals, and the
-`repository-standards` status check, and by blocking force pushes and deletion.
+Hooks improve local feedback but can be bypassed. The GitHub workflows repeat
+every check: `repository-standards` for the conventions and `CI` for lint,
+build, and tests. Repository administrators should also protect the default
+branch by requiring pull requests, approvals, and the `repository-standards`,
+`lint`, and `build-and-test` status checks, and by blocking force pushes and
+deletion.
 
-## Adding the backend stack
+## The stack
 
-When the technology is chosen, the first stack setup pull request should add:
+Python 3.12 with Django 6.1 and Django REST Framework. Tooling that is in
+place:
 
-1. The ecosystem's formatter and linter with committed configuration.
-2. A test command and, where supported, a static type-check command.
-3. Locked dependency versions and a documented supported runtime version.
-4. CI steps for formatting, linting, tests, and type checking.
-5. Editor integration that does not conflict with `.editorconfig`.
+- **ruff** for linting and formatting, configured in `pyproject.toml`.
+- **`scripts/check.sh`** as the single entry point for every gate, used by the
+  hooks and by CI.
+- Pinned direct dependencies in `requirements.txt` and `requirements-dev.txt`.
+- `.editorconfig` covers Python indentation and line length so editors agree
+  with ruff.
 
-Prefer one canonical command (for example, `make check` or a package-manager
-script named `check`) that runs every required quality gate locally and in CI.
+Still open, for whoever picks them up:
+
+1. A dependency lock file.
+2. A static type checker, wired into `scripts/check.sh` and CI.
+
+Anything added to the quality gates belongs in `scripts/check.sh` so that the
+hooks and CI stay in step.

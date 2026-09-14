@@ -13,8 +13,7 @@ local development.
 
 ## Requirements
 
-- Python (version not pinned yet — see
-  [CONTRIBUTING.md](CONTRIBUTING.md#adding-the-backend-stack))
+- Python 3.12 (the version CI runs and the linter targets)
 - pip and `venv`
 
 ## Getting started
@@ -52,12 +51,15 @@ python -m venv venv
 Install dependencies and create your local environment file:
 
 ```sh
-pip install -r requirements.txt
+pip install -r requirements.txt -r requirements-dev.txt
 cp .env.example .env
 ```
 
-Set at least `SECRET_KEY` and `DB_ENGINE` in `.env`; the defaults in
-`.env.example` use SQLite. `.env` is git-ignored and must never be committed.
+`requirements-dev.txt` holds the tooling the Git hooks need, so install it even
+if you only plan to run the server. Settings are read from `.env` through
+`python-dotenv`; the defaults in `.env.example` use SQLite. Set `SECRET_KEY`
+for anything beyond a throwaway local database. `.env` is git-ignored and must
+never be committed.
 
 Apply migrations and start the development server:
 
@@ -87,16 +89,50 @@ craftcv_backend/
 ├── craftcv/              # Project configuration
 │   ├── settings.py
 │   ├── urls.py
+│   ├── tests.py          # Smoke tests for the project wiring
 │   ├── asgi.py
 │   └── wsgi.py
-├── scripts/              # Git hook installers and convention checks
-├── .githooks/            # commit-msg and pre-commit hooks
+├── scripts/              # check.sh, hook installers, convention checks
+├── .githooks/            # pre-commit, commit-msg, pre-push
+├── .github/workflows/    # CI and repository-standards
 ├── manage.py
-└── requirements.txt
+├── pyproject.toml        # ruff configuration
+├── requirements.txt
+└── requirements-dev.txt  # Tooling the hooks need
 ```
 
 New apps live under `apps/` and are registered in `INSTALLED_APPS` with their
 dotted path (for example `apps.users`).
+
+## Quality checks
+
+`scripts/check.sh` is the one command that runs every gate. The Git hooks and
+GitHub Actions both call it, so local and CI results cannot drift.
+
+```sh
+sh scripts/check.sh lint     # ruff lint + format check
+sh scripts/check.sh build    # django system checks + missing migrations
+sh scripts/check.sh test     # django unit tests
+sh scripts/check.sh all      # all of the above
+```
+
+It finds `venv/` (or `.venv/`) on its own; set `PYTHON=/path/to/python` to
+override.
+
+When to expect each one:
+
+| Moment | What runs |
+| --- | --- |
+| `git commit` | Branch and subject conventions, whitespace, and **lint on staged Python files** |
+| `git push` | The same conventions, then **build and unit tests** |
+| Pull request / push to `main`, `develop` | Lint, build, and tests again in GitHub Actions |
+
+Lint runs on commit because it is fast; the slower build and test run once per
+push. Fix lint failures with `python -m ruff check --fix .` and
+`python -m ruff format .`. For an emergency push, `SKIP_PUSH_CHECKS=1 git push`
+skips the build and tests — CI still runs them.
+
+Linter and formatter rules live in `pyproject.toml` (ruff, line length 100).
 
 ## Tests
 
@@ -104,21 +140,19 @@ dotted path (for example `apps.users`).
 python manage.py test
 ```
 
-`settings.py` detects test runs and skips loading the debug toolbar. There are
-no tests yet beyond the generated placeholders.
+`craftcv/tests.py` holds smoke tests for the URL wiring; feature tests belong in
+the app that owns the behaviour. `settings.py` detects test runs and skips
+loading the debug toolbar.
 
 ## Known gaps
 
 These are tracked as follow-up work and are intentionally listed here so they
 are not mistaken for finished configuration:
 
-- `DEBUG` is hard-coded to `True` and `ALLOWED_HOSTS` is empty in
-  `craftcv/settings.py`; neither reads from `.env` yet.
-- `DATABASES['default']['NAME']` is hard-coded to `db.sqlite3`, so the
-  `DB_NAME`/`DB_USER`/`DB_PASSWORD`/`DB_HOST`/`DB_PORT` variables in
-  `.env.example` are not used.
-- No formatter, linter, type checker, dependency lock file, or CI build/test
-  job yet — CI currently validates repository conventions only.
+- No dependency lock file: `requirements.txt` pins direct dependencies only.
+- No static type checking.
+- No production settings module; `DEBUG` defaults to off and is turned on
+  through `.env` for local work.
 
 ## Contributing
 
