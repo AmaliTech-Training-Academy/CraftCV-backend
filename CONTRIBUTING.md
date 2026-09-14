@@ -5,11 +5,11 @@ backend.
 
 ## Branches
 
-Create work from an up-to-date `main` branch. Do not commit directly to `main`.
-Use this format:
+Create work from an up-to-date `main` branch. Do not commit directly to `main`
+or `develop`. Every branch must reference its ticket, using this format:
 
 ```text
-<type>/<short-kebab-case-description>
+<type>/crf-<ticket-number>-<short-kebab-case-description>
 ```
 
 Allowed types:
@@ -28,9 +28,16 @@ Allowed types:
 | `hotfix` | Urgent production fix |
 | `release` | Release preparation |
 
-Examples: `feat/resume-export`, `fix/token-expiry`, `chore/select-backend-stack`.
-Use lowercase letters and numbers, separated by hyphens. Keep a branch focused
-on one concern and delete it after merge.
+Examples: `feat/crf-3-resume-export`, `fix/crf-42-token-expiry`,
+`chore/crf-7-bump-django`.
+
+Use lowercase letters and numbers, separated by hyphens. The ticket key `crf`
+and its number come first, followed by a short description — a bare
+`feat/crf-12` is rejected. Keep a branch focused on one concern and delete it
+after merge.
+
+The branch name is checked when you commit and again when you push; a push from
+a branch without a ticket reference fails with an example-driven error.
 
 ## Commits
 
@@ -66,8 +73,20 @@ characters. Keep commits small, buildable, and free of unrelated formatting.
 ## Local quality checks
 
 Run `sh scripts/setup-hooks.sh` or `.\scripts\setup-hooks.ps1` once per clone.
-The hooks then reject invalid branch names and commit subjects and run Git's
-whitespace/error checks against staged changes.
+Three hooks then run automatically:
+
+| Hook | Checks |
+| --- | --- |
+| `pre-commit` | Blocks commits on `main` and `develop`, validates the current branch name, and runs Git's whitespace/error checks on staged changes |
+| `commit-msg` | Validates the commit subject |
+| `pre-push` | Re-validates the branch name and every commit subject being pushed |
+
+`pre-push` is the backstop: a branch missing its `crf-<number>` ticket
+reference, or a commit subject that skipped `commit-msg` via `--no-verify`,
+fails there before it reaches the remote. Pushes of `main` and `develop`, and
+branch deletions, are not blocked. Every rule lives in
+`scripts/validate-conventions.sh`, which prints correct and incorrect examples
+on failure; change the `ticket_key` variable there if the project key changes.
 
 Hooks improve local feedback but can be bypassed. The GitHub workflow repeats
 the convention checks for pull requests. Repository administrators should also
