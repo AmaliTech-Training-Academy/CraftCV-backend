@@ -138,6 +138,8 @@ Python 3.12 with Django 6.1 and Django REST Framework. Tooling that is in
 place:
 
 - **ruff** for linting and formatting, configured in `pyproject.toml`.
+- **Docker**: `Dockerfile` for the application image and `compose.yaml` for a
+  local app-plus-Postgres stack. CI builds the image on every pull request.
 - **`scripts/check.sh`** as the single entry point for every gate, used by the
   hooks and by CI.
 - Pinned direct dependencies in `requirements.txt` and `requirements-dev.txt`.
@@ -148,6 +150,8 @@ Still open, for whoever picks them up:
 
 1. A dependency lock file.
 2. A static type checker, wired into `scripts/check.sh` and CI.
+3. Running the test suite against Postgres in CI. It currently runs on SQLite
+   while the application targets Postgres.
 
 Anything added to the quality gates belongs in `scripts/check.sh` so that the
 hooks and CI stay in step.
