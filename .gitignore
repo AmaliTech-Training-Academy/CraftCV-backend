@@ -5,3 +5,6 @@ __pycache__/
 *.py[cod]
 *$py.class
 .vscode/
+.ruff_cache/
+*.sqlite3
+staticfiles/
