@@ -1,0 +1,10 @@
+# Core Framework
+django==6.1.1
+djangorestframework==3.18.1
+
+# API Documentation
+drf-spectacular==0.28.0
+
+# Development Tools
+django-debug-toolbar==8.0.0
+python-dotenv==1.0.1
