@@ -3,34 +3,42 @@ from rest_framework import serializers
 
 User = get_user_model()
 
+
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = [
             "id",
             "email",
-            "firstName",
-            "lastName",
-            "otherName",
-            "createdAt",
+            "first_name",
+            "last_name",
+            "other_name",
+            "created_at",
         ]
-        read_only_fields = ["id", "createdAt"]
+        read_only_fields = ["id", "created_at"]
 
 
 class UserCreateSerializer(serializers.ModelSerializer):
+    agree_to_terms = serializers.BooleanField(required=True)
+
     class Meta:
         model = User
-        fields = ["firstName", "lastName", "otherName", "password", "agreeToTerms"]
+        fields = ["email", "first_name", "last_name", "other_name", "password", "agree_to_terms"]
 
     def validate_email(self, value):
         if User.objects.filter(email__iexact=value).exists():
             raise serializers.ValidationError("A user with this email already exists.")
         return value.lower()
 
-    def validate_agreeToTerms(self, value):
+    def validate_agree_to_terms(self, value):
         if not value:
             raise serializers.ValidationError("You must agree to the terms to register")
         return value
 
     def create(self, validated_data):
         return User.objects.create_user(**validated_data)
+
+
+class LoginSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True, style={"input_type": "password"})
