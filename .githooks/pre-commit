@@ -3,17 +3,23 @@
 set -eu
 
 repo_root=$(git rev-parse --show-toplevel)
+validate="$repo_root/scripts/validate-conventions.sh"
 branch=$(git symbolic-ref --quiet --short HEAD || true)
 
 if [ -n "$branch" ]; then
-  if [ "$branch" = "main" ]; then
-    printf '%s\n' "Direct commits to main are not allowed. Create a typed branch first." >&2
+  if sh "$validate" is-protected "$branch"; then
+    printf '%s\n' "Direct commits to '$branch' are not allowed. Create a branch first:" >&2
+    printf '%s\n' "    git switch -c feat/crf-<ticket-number>-<short-description>" >&2
     exit 1
   fi
-  sh "$repo_root/scripts/validate-conventions.sh" branch "$branch"
+  sh "$validate" branch "$branch"
 fi
 
 git diff --cached --check
 
-# Once a backend stack is selected, its canonical check command should be added
-# here and to the GitHub Actions workflow.
+# Lint is fast, so it runs on every commit. Tests and the build run on push.
+sh "$repo_root/scripts/check.sh" lint --staged
+
+# A behaviour change without a test is rejected here, while the code is still
+# in front of the author. SKIP_TEST_CHECK=1 is the deliberate way out.
+sh "$repo_root/scripts/check.sh" tests-required

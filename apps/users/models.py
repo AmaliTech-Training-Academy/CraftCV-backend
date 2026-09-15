@@ -4,7 +4,6 @@ from django.contrib.auth.models import AbstractBaseUser
 from .managers import CustomUserManager
 
 # Create your models here.
-
 class User(AbstractBaseUser):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     email = models.EmailField(unique=True, error_messages={

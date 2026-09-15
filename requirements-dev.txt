@@ -1,0 +1,5 @@
+# Development-only tooling. Install with:
+#   pip install -r requirements.txt -r requirements-dev.txt
+
+# Linter and formatter
+ruff==0.16.7

@@ -1,0 +1,47 @@
+name: craftcv
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${DB_NAME:-craftcv}
+      POSTGRES_USER: ${DB_USER:-craftcv}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-craftcv}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      # Host port only, so a local psql can reach it without clashing with a
+      # Postgres already installed on the machine.
+      - "${DB_HOST_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-craftcv} -d ${DB_NAME:-craftcv}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build: .
+    # Development server. The image's own CMD runs gunicorn instead.
+    command: python manage.py runserver 0.0.0.0:8000
+    environment:
+      SECRET_KEY: ${SECRET_KEY:-django-insecure-local-development-only}
+      DEBUG: ${DEBUG:-True}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-127.0.0.1,localhost,0.0.0.0}
+      DB_ENGINE: django.db.backends.postgresql
+      DB_NAME: ${DB_NAME:-craftcv}
+      DB_USER: ${DB_USER:-craftcv}
+      DB_PASSWORD: ${DB_PASSWORD:-craftcv}
+      # Inside the compose network the database is reachable by service name.
+      DB_HOST: db
+      DB_PORT: 5432
+    volumes:
+      # Source is mounted so edits reload without a rebuild.
+      - .:/app
+    ports:
+      - "${WEB_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  postgres-data:

@@ -1,0 +1,68 @@
+#!/bin/sh
+
+# Rejects a push whose branch name or commit subjects break the conventions in
+# CONTRIBUTING.md, then runs the build and unit tests. Git feeds one line per
+# pushed ref on stdin:
+#   <local ref> <local sha> <remote ref> <remote sha>
+
+set -u
+
+repo_root=$(git rev-parse --show-toplevel)
+validate="$repo_root/scripts/validate-conventions.sh"
+
+status=0
+pushing_branch=0
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ -n "${local_ref:-}" ] || continue
+
+  # An all-zero local sha means the ref is being deleted.
+  case "$local_sha" in *[!0]*) ;; *) continue ;; esac
+
+  case "$local_ref" in
+    refs/heads/*) branch=${local_ref#refs/heads/} ;;
+    *) continue ;;
+  esac
+
+  pushing_branch=1
+  sh "$validate" branch "$branch" || status=1
+
+  # An all-zero remote sha means the branch is new on the remote, so check every
+  # commit that is not yet on any remote-tracking branch.
+  case "$remote_sha" in
+    *[!0]*) subjects=$(git log --format=%s "$remote_sha..$local_sha") ;;
+    *) subjects=$(git log --format=%s "$local_sha" --not --remotes) ;;
+  esac
+
+  while IFS= read -r subject; do
+    [ -n "$subject" ] || continue
+    sh "$validate" commit "$subject" || status=1
+  done <<EOF
+$subjects
+EOF
+done
+
+# Naming problems are cheap to detect, so report them before spending time on
+# the build and the test suite.
+if [ "$status" -ne 0 ]; then
+  printf '\n%s\n' "Push rejected. Fix the items above and push again." >&2
+  exit 1
+fi
+
+# Nothing but deletions or tags: no code to verify.
+[ "$pushing_branch" -eq 1 ] || exit 0
+
+# Set SKIP_PUSH_CHECKS=1 for the rare push that must go out without them.
+if [ "${SKIP_PUSH_CHECKS:-0}" = "1" ]; then
+  printf '%s\n' "[check] skipped: SKIP_PUSH_CHECKS=1" >&2
+  exit 0
+fi
+
+sh "$repo_root/scripts/check.sh" build || status=1
+sh "$repo_root/scripts/check.sh" test || status=1
+
+if [ "$status" -ne 0 ]; then
+  printf '\n%s\n' "Push rejected: the build or the tests failed. Fix them and push again." >&2
+  printf '%s\n' "Re-run locally with: sh scripts/check.sh all" >&2
+  exit 1
+fi
