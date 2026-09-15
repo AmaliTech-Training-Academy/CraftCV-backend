@@ -27,12 +27,3 @@ class User(AbstractBaseUser):
 
     def __str__(self):
         return self.email
-
-    def save(self, *args, **kwargs):
-        if self.email:
-            self.username = self.email.lower()
-
-        if not self.username:
-            self.username = self.email
-
-        super().save(*args, **kwargs)
