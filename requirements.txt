@@ -15,3 +15,4 @@ gunicorn==26.2.0
 django-debug-toolbar==8.0.0
 python-dotenv==1.2.3
 djangorestframework_simplejwt==5.5.1
+djangorestframework_camel_case==1.4.2
