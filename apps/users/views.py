@@ -1,8 +1,10 @@
 from django.contrib.auth import authenticate, get_user_model
+from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .serializers import LoginSerializer, UserCreateSerializer, UserSerializer
@@ -33,6 +35,16 @@ class AuthViewSet(viewsets.GenericViewSet):
             "refresh": str(refresh),
         }
 
+    @extend_schema(
+        operation_id="auth_register",
+        summary="Register a new user",
+        description="Create a new account and return JWT access & refresh tokens.",
+        request=UserCreateSerializer,
+        responses={
+            201: OpenApiResponse(description="User registered successfully"),
+        },
+        tags=["auth"],
+    )
     @action(detail=False, methods=["post"], url_path="register")
     def register(self, request):
         serializer = self.get_serializer(data=request.data)
@@ -40,6 +52,17 @@ class AuthViewSet(viewsets.GenericViewSet):
         user = serializer.save()
         return Response(self._token_payload(user), status=status.HTTP_201_CREATED)
 
+    @extend_schema(
+        operation_id="auth_login",
+        summary="Log in",
+        description="Authenticate with email and password and return JWT tokens.",
+        request=LoginSerializer,
+        responses={
+            200: OpenApiResponse(description="Login successful, tokens returned"),
+            401: OpenApiResponse(description="Invalid email or password"),
+        },
+        tags=["auth"],
+    )
     @action(detail=False, methods=["post"], url_path="login")
     def login(self, request):
         serializer = self.get_serializer(data=request.data)
@@ -57,21 +80,19 @@ class AuthViewSet(viewsets.GenericViewSet):
 
         return Response(self._token_payload(user), status=status.HTTP_200_OK)
 
-    @action(detail=False, methods=["get"], url_path="me")
+    @extend_schema(
+        operation_id="auth_me",
+        summary="Get current user",
+        description="Return the profile of the currently authenticated user.",
+        responses={200: UserSerializer},
+        tags=["auth"],
+    )
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="me",
+        authentication_classes=[JWTAuthentication],
+        permission_classes=[IsAuthenticated],
+    )
     def me(self, request):
         return Response(self.get_serializer(request.user).data)
-
-    # @action(detail=False, methods=["post"], url_path="logout")
-    # def logout(self, request):
-    #     serializer = self.get_serializer(data=request.data)
-    #     serializer.is_valid(raise_exception=True)
-
-    #     try:
-    #         token = RefreshToken(serializer.validated_data["refresh"])
-    #         token.blacklist()
-    #     except TokenError:
-    #         return Response(
-    #             {"detail": "Invalid or expired refresh token."},
-    #             status=status.HTTP_400_BAD_REQUEST,
-    #         )
-    #     return Response(status=status.HTTP_205_RESET_CONTENT)
