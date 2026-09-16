@@ -8,20 +8,20 @@ User = get_user_model()
 
 class UserCreationTest(APITestCase):
     def setUp(self):
-        self.url = reverse('auth-register')
+        self.url = reverse("auth-register")
         self.valid_payload = {
             "email": "faith@example.com",
             "password": "StrongPass123!",
             "firstName": "Faith",
             "lastName": "Gbadegbe",
             "otherName": "Etornam",
-            "agreeToTerms": True
+            "agreeToTerms": True,
         }
 
     def test_registration_success(self):
         response = self.client.post(self.url, self.valid_payload, format="json")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertTrue(User.objects.filter(email=self.valid_payload['email']).exists())
+        self.assertTrue(User.objects.filter(email=self.valid_payload["email"]).exists())
 
     def test_registration_duplicate_email_fails(self):
         self.client.post(self.url, self.valid_payload, format="json")
@@ -36,10 +36,9 @@ class UserCreationTest(APITestCase):
         self.assertTrue(user.check_password(self.valid_payload["password"]))
 
 
-
 class LoginTest(APITestCase):
     def setUp(self):
-        self.url = reverse('auth-login')
+        self.url = reverse("auth-login")
         self.email = "faith@example.com"
         self.password = "StrongPass123!"
         self.user = User.objects.create_user(
@@ -47,7 +46,7 @@ class LoginTest(APITestCase):
             password=self.password,
             first_name="Faith",
             last_name="Gbadegbe",
-            agree_to_terms=True
+            agree_to_terms=True,
         )
 
     def test_login_success(self):
