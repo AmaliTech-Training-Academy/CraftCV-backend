@@ -1,12 +1,11 @@
 from django.contrib.auth import authenticate, get_user_model
+from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.tokens import RefreshToken
-
-from drf_spectacular.utils import extend_schema, OpenApiResponse
 
 from .serializers import LoginSerializer, UserCreateSerializer, UserSerializer
 
