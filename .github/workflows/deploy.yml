@@ -1,0 +1,72 @@
+name: Deploy Sandbox
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
+    branches:
+      - develop
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: eu-central-1
+  INSTANCE_ID: i-0938e0e447cfa0fb8
+
+jobs:
+  deploy:
+    name: Deploy to Sandbox
+    runs-on: ubuntu-latest
+
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::897729111286:role/craftcv-github-deploy
+          aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: 897729111286
+
+      - name: Deploy through AWS Systems Manager
+        id: deploy
+        run: |
+          COMMAND_ID=$(aws ssm send-command \
+            --region "$AWS_REGION" \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --comment "Deploy CraftCV backend" \
+            --parameters 'commands=[
+              "cd /opt/craftcv",
+              "git fetch origin develop",
+              "git reset --hard origin/develop",
+              "sudo docker compose -f compose.deploy.yaml up -d --build",
+              "sudo docker compose -f compose.deploy.yaml exec -T web python manage.py migrate",
+              "sudo docker image prune -f"
+            ]' \
+            --query "Command.CommandId" \
+            --output text)
+
+          echo "command_id=$COMMAND_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for deployment
+        run: |
+          aws ssm wait command-executed \
+            --region "$AWS_REGION" \
+            --command-id "${{ steps.deploy.outputs.command_id }}" \
+            --instance-id "$INSTANCE_ID"
+
+      - name: Show deployment result
+        run: |
+          aws ssm get-command-invocation \
+            --region "$AWS_REGION" \
+            --command-id "${{ steps.deploy.outputs.command_id }}" \
+            --instance-id "$INSTANCE_ID" \
+            --query '{
+              Status:Status,
+              Output:StandardOutputContent,
+              Errors:StandardErrorContent
+            }'
