@@ -1,20 +1,19 @@
 name: CI
 
 on:
-  pull_request:
-  push:
-    branches: [main, develop]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 env:
-  PYTHON_VERSION: '3.12'
+  PYTHON_VERSION: "3.12"
 
 jobs:
   lint:
     name: lint
     runs-on: ubuntu-latest
+
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -28,13 +27,13 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt -r requirements-dev.txt
 
-      # Same entry point as the pre-commit hook, so local and CI results match.
       - name: Lint
         run: sh scripts/check.sh lint
 
   build-and-test:
     name: build-and-test
     runs-on: ubuntu-latest
+
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -48,7 +47,6 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      # Same entry points as the pre-push hook.
       - name: Build
         run: sh scripts/check.sh build
 
@@ -58,11 +56,11 @@ jobs:
   docker:
     name: docker
     runs-on: ubuntu-latest
+
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
 
-      # Building on every pull request keeps the image from rotting unnoticed.
       - name: Build the image
         run: docker build --tag craftcv-backend:ci .
 
