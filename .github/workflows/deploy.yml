@@ -14,7 +14,6 @@ permissions:
 
 env:
   AWS_REGION: eu-central-1
-  INSTANCE_ID: i-0938e0e447cfa0fb8
 
 jobs:
   deploy:
@@ -31,12 +30,31 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           allowed-account-ids: 897729111286
 
+      - name: Find CraftCV EC2 instance
+        id: instance
+        run: |
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --region "$AWS_REGION" \
+            --filters \
+              "Name=tag:Name,Values=craftcv-backend" \
+              "Name=instance-state-name,Values=running" \
+            --query "Reservations[].Instances[].InstanceId" \
+            --output text)
+
+          if [ -z "$INSTANCE_ID" ]; then
+            echo "No running CraftCV instance found."
+            exit 1
+          fi
+
+          echo "Found instance: $INSTANCE_ID"
+          echo "instance_id=$INSTANCE_ID" >> "$GITHUB_OUTPUT"
+
       - name: Deploy through AWS Systems Manager
         id: deploy
         run: |
           COMMAND_ID=$(aws ssm send-command \
             --region "$AWS_REGION" \
-            --instance-ids "$INSTANCE_ID" \
+            --instance-ids "${{ steps.instance.outputs.instance_id }}" \
             --document-name "AWS-RunShellScript" \
             --comment "Deploy CraftCV backend" \
             --parameters 'commands=[
@@ -57,14 +75,14 @@ jobs:
           aws ssm wait command-executed \
             --region "$AWS_REGION" \
             --command-id "${{ steps.deploy.outputs.command_id }}" \
-            --instance-id "$INSTANCE_ID"
+            --instance-id "${{ steps.instance.outputs.instance_id }}"
 
       - name: Show deployment result
         run: |
           aws ssm get-command-invocation \
             --region "$AWS_REGION" \
             --command-id "${{ steps.deploy.outputs.command_id }}" \
-            --instance-id "$INSTANCE_ID" \
+            --instance-id "${{ steps.instance.outputs.instance_id }}" \
             --query '{
               Status:Status,
               Output:StandardOutputContent,
