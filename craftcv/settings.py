@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "corsheaders",
     "rest_framework",
     "drf_spectacular",
     "apps.users",
@@ -62,6 +63,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -212,3 +214,11 @@ AUTH_USER_MODEL = "users.User"
 SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ("JWT",),
 }
+
+
+
+CORS_ALLOW_ALL_ORIGINS = env_bool('CORS_ALLOW_ALL_ORIGINS', default=False)
+
+CORS_ALLOW_CREDENTIALS = True
+
+# CORS_ALLOWED_ORIGINS = []
