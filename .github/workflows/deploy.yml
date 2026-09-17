@@ -1,7 +1,10 @@
 name: Deploy Sandbox
 
 on:
-  push:
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
     branches:
       - develop
 
@@ -15,7 +18,10 @@ env:
 
 jobs:
   deploy:
+    name: Deploy to Sandbox
     runs-on: ubuntu-latest
+
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
 
     steps:
       - name: Configure AWS credentials
@@ -23,6 +29,7 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::897729111286:role/craftcv-github-deploy
           aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: 897729111286
 
       - name: Deploy through AWS Systems Manager
         id: deploy
