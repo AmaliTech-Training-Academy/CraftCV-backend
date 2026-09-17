@@ -201,6 +201,10 @@ SPECTACULAR_SETTINGS = {
     "DESCRIPTION": "CraftCV is a web application that helps individuals build seamless CV",
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
+    "POSTPROCESSING_HOOKS": [
+        "drf_spectacular.hooks.postprocess_schema_enums",
+        "drf_spectacular.contrib.djangorestframework_camel_case.camelize_serializer_fields",
+    ],
 }
 
 AUTH_USER_MODEL = "users.User"

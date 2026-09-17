@@ -7,7 +7,12 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .serializers import LoginSerializer, UserCreateSerializer, UserSerializer
+from .serializers import (
+    LoginSerializer,
+    TokenPayloadSerializer,
+    UserCreateSerializer,
+    UserSerializer,
+)
 
 User = get_user_model()
 
@@ -41,9 +46,12 @@ class AuthViewSet(viewsets.GenericViewSet):
         description="Create a new account and return JWT access & refresh tokens.",
         request=UserCreateSerializer,
         responses={
-            201: OpenApiResponse(description="User registered successfully"),
+            201: OpenApiResponse(
+                response=TokenPayloadSerializer,
+                description="User registered successfully",
+            ),
         },
-        tags=["auth"],
+        tags=["Authentication"],
     )
     @action(detail=False, methods=["post"], url_path="register")
     def register(self, request):
@@ -58,10 +66,10 @@ class AuthViewSet(viewsets.GenericViewSet):
         description="Authenticate with email and password and return JWT tokens.",
         request=LoginSerializer,
         responses={
-            200: OpenApiResponse(description="Login successful, tokens returned"),
+            200: TokenPayloadSerializer,
             401: OpenApiResponse(description="Invalid email or password"),
         },
-        tags=["auth"],
+        tags=["Authentication"],
     )
     @action(detail=False, methods=["post"], url_path="login")
     def login(self, request):
@@ -85,7 +93,7 @@ class AuthViewSet(viewsets.GenericViewSet):
         summary="Get current user",
         description="Return the profile of the currently authenticated user.",
         responses={200: UserSerializer},
-        tags=["auth"],
+        tags=["Authentication"],
     )
     @action(
         detail=False,
