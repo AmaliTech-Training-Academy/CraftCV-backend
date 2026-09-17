@@ -51,7 +51,7 @@ class AuthViewSet(viewsets.GenericViewSet):
                 description="User registered successfully",
             ),
         },
-        tags=["auth"],
+        tags=["Authentication"],
     )
     @action(detail=False, methods=["post"], url_path="register")
     def register(self, request):
@@ -69,7 +69,7 @@ class AuthViewSet(viewsets.GenericViewSet):
             200: TokenPayloadSerializer,
             401: OpenApiResponse(description="Invalid email or password"),
         },
-        tags=["auth"],
+        tags=["Authentication"],
     )
     @action(detail=False, methods=["post"], url_path="login")
     def login(self, request):
@@ -93,7 +93,7 @@ class AuthViewSet(viewsets.GenericViewSet):
         summary="Get current user",
         description="Return the profile of the currently authenticated user.",
         responses={200: UserSerializer},
-        tags=["auth"],
+        tags=["Authentication"],
     )
     @action(
         detail=False,
