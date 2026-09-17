@@ -12,15 +12,11 @@ class User(AbstractBaseUser):
     email = models.EmailField(
         unique=True, error_messages={"unique": "A user with this email already exists"}
     )
-    first_name = models.CharField(max_length=150, blank=True)
-    last_name = models.CharField(max_length=150, blank=True)
-    other_name = models.CharField(max_length=150, blank=True)
     agree_to_terms = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     objects = CustomUserManager()
 
     USERNAME_FIELD = "email"
-    REQUIRED_FIELDS = ["first_name", "last_name"]
 
     class Meta:
         ordering = ["-created_at"]
