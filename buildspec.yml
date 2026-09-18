@@ -26,6 +26,42 @@ phases:
       # Actions workflow, and target-version in pyproject.toml.
       python: 3.12
     commands:
+      # --- Repository conventions -----------------------------------------
+      # Was the repository-standards GitHub Actions workflow. It runs here
+      # first, before anything expensive, because a badly named branch should
+      # cost seconds not minutes.
+      #
+      # Pull requests only: develop and main are protected branches whose
+      # history has already been through this check, and validate-conventions
+      # exempts them by design.
+      - |
+        case "${CODEBUILD_WEBHOOK_EVENT:-}" in
+          PULL_REQUEST_*)
+            BASE="${CODEBUILD_WEBHOOK_BASE_REF#refs/heads/}"
+            HEAD_BRANCH="${CODEBUILD_WEBHOOK_HEAD_REF#refs/heads/}"
+            echo "Checking conventions: ${HEAD_BRANCH} -> ${BASE}"
+
+            sh scripts/validate-conventions.sh branch "$HEAD_BRANCH" || exit 1
+
+            git fetch --quiet origin "$BASE" || { echo "could not fetch ${BASE}"; exit 1; }
+            MERGE_BASE=$(git merge-base FETCH_HEAD HEAD)
+            echo "Comparing ${MERGE_BASE}..HEAD"
+
+            # Read from a file, not a pipe: a pipeline would put the loop in a
+            # subshell and swallow the failing exit status.
+            git log --format=%s "${MERGE_BASE}..HEAD" > /tmp/subjects
+            while IFS= read -r subject; do
+              [ -n "$subject" ] || continue
+              sh scripts/validate-conventions.sh commit "$subject" || exit 1
+            done < /tmp/subjects
+
+            git diff --check "${MERGE_BASE}..HEAD" || { echo "whitespace errors above"; exit 1; }
+            echo "Conventions OK"
+            ;;
+          *)
+            echo "Not a pull request - skipping convention checks."
+            ;;
+        esac
       - python -m pip install --upgrade pip
       # requirements.txt for the build/test gates, requirements-dev.txt for ruff.
       - pip install -r requirements.txt -r requirements-dev.txt
