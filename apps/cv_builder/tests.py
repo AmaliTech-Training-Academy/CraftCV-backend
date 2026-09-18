@@ -10,12 +10,10 @@ from apps.cv_builder.models import (
     Template,
 )
 
-
 User = get_user_model()
 
 
 class CVAPITestCase(TestCase):
-
     def setUp(self):
         self.client = APIClient()
 
@@ -66,9 +64,7 @@ class CVAPITestCase(TestCase):
         )
 
     def authenticate(self):
-        self.client.force_authenticate(
-            user=self.user
-        )
+        self.client.force_authenticate(user=self.user)
 
     def test_unauthenticated_user_cannot_list_cvs(self):
         response = self.client.get("/api/cvs/")
@@ -91,24 +87,17 @@ class CVAPITestCase(TestCase):
                 "design": "professional",
             },
         )
+
     def test_authenticated_user_can_create_cv(self):
         self.authenticate()
 
         payload = {
             "title": "Software Engineer CV",
-            "professional_summary": (
-                "Backend developer interested in cloud computing."
-            ),
+            "professional_summary": ("Backend developer interested in cloud computing."),
             "template": str(self.template.template_id),
-            "educations": [
-                str(self.education.education_id)
-            ],
-            "experiences": [
-                str(self.experience.experience_id)
-            ],
-            "skills": [
-                str(self.skill.skill_id)
-            ],
+            "educations": [str(self.education.education_id)],
+            "experiences": [str(self.experience.experience_id)],
+            "skills": [str(self.skill.skill_id)],
         }
 
         response = self.client.post(
@@ -148,9 +137,7 @@ class CVAPITestCase(TestCase):
             professional_summary="My summary",
         )
 
-        response = self.client.get(
-            f"/api/cvs/{cv.cv_id}/"
-        )
+        response = self.client.get(f"/api/cvs/{cv.cv_id}/")
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
@@ -168,9 +155,7 @@ class CVAPITestCase(TestCase):
             professional_summary="Private information",
         )
 
-        response = self.client.get(
-            f"/api/cvs/{another_cv.cv_id}/"
-        )
+        response = self.client.get(f"/api/cvs/{another_cv.cv_id}/")
 
         self.assertEqual(response.status_code, 404)
 
@@ -189,9 +174,7 @@ class CVAPITestCase(TestCase):
             "title": "Invalid CV",
             "professional_summary": "Testing ownership",
             "template": str(self.template.template_id),
-            "educations": [
-                str(another_education.education_id)
-            ],
+            "educations": [str(another_education.education_id)],
         }
 
         response = self.client.post(
@@ -274,11 +257,7 @@ class CVAPITestCase(TestCase):
         )
 
         # The master Education record still exists.
-        self.assertTrue(
-            Education.objects.filter(
-                education_id=self.education.education_id
-            ).exists()
-        )
+        self.assertTrue(Education.objects.filter(education_id=self.education.education_id).exists())
 
     def test_deleting_education_does_not_delete_cv(self):
         self.authenticate()
@@ -292,20 +271,12 @@ class CVAPITestCase(TestCase):
 
         cv.educations.add(self.education)
 
-        response = self.client.delete(
-            f"/api/cvs/educations/{self.education.education_id}/"
-        )
+        response = self.client.delete(f"/api/cvs/educations/{self.education.education_id}/")
 
         self.assertEqual(response.status_code, 204)
 
-        response = self.client.get(
-            f"/api/cvs/{cv.cv_id}/"
-        )
+        response = self.client.get(f"/api/cvs/{cv.cv_id}/")
 
         self.assertEqual(response.status_code, 200)
 
-        self.assertTrue(
-            CV.objects.filter(
-                cv_id=cv.cv_id
-            ).exists()
-        )
+        self.assertTrue(CV.objects.filter(cv_id=cv.cv_id).exists())
