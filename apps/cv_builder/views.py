@@ -35,8 +35,7 @@ class CVListCreateView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         return (
-            CV.objects
-            .filter(user=self.request.user)
+            CV.objects.filter(user=self.request.user)
             .select_related(
                 "template",
                 "user",
@@ -65,8 +64,7 @@ class CVDetailView(generics.RetrieveUpdateAPIView):
 
     def get_queryset(self):
         return (
-            CV.objects
-            .filter(user=self.request.user)
+            CV.objects.filter(user=self.request.user)
             .select_related(
                 "template",
                 "user",
@@ -98,24 +96,16 @@ class PersonalDetailView(generics.RetrieveUpdateAPIView):
 
     def get_object(self):
         try:
-            return PersonalDetail.objects.get(
-                user=self.request.user
-            )
+            return PersonalDetail.objects.get(user=self.request.user)
         except PersonalDetail.DoesNotExist:
-            raise NotFound(
-                "Personal details have not been created yet."
-            )
+            raise NotFound("Personal details have not been created yet.") from None
 
     def put(self, request, *args, **kwargs):
         try:
-            personal_detail = PersonalDetail.objects.get(
-                user=request.user
-            )
+            personal_detail = PersonalDetail.objects.get(user=request.user)
 
         except PersonalDetail.DoesNotExist:
-            serializer = self.get_serializer(
-                data=request.data
-            )
+            serializer = self.get_serializer(data=request.data)
 
             serializer.is_valid(raise_exception=True)
             serializer.save(user=request.user)
@@ -139,14 +129,13 @@ class PersonalDetailView(generics.RetrieveUpdateAPIView):
             status=200,
         )
 
+
 class EducationListCreateView(generics.ListCreateAPIView):
     serializer_class = EducationSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return Education.objects.filter(
-            user=self.request.user
-        )
+        return Education.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
@@ -158,18 +147,15 @@ class EducationDetailView(generics.RetrieveUpdateDestroyAPIView):
     lookup_field = "education_id"
 
     def get_queryset(self):
-        return Education.objects.filter(
-            user=self.request.user
-        )
+        return Education.objects.filter(user=self.request.user)
+
 
 class ExperienceListCreateView(generics.ListCreateAPIView):
     serializer_class = ExperienceSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return Experience.objects.filter(
-            user=self.request.user
-        )
+        return Experience.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
@@ -181,18 +167,15 @@ class ExperienceDetailView(generics.RetrieveUpdateDestroyAPIView):
     lookup_field = "experience_id"
 
     def get_queryset(self):
-        return Experience.objects.filter(
-            user=self.request.user
-        )
+        return Experience.objects.filter(user=self.request.user)
+
 
 class SkillListCreateView(generics.ListCreateAPIView):
     serializer_class = SkillSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return Skill.objects.filter(
-            user=self.request.user
-        )
+        return Skill.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
@@ -204,18 +187,15 @@ class SkillDetailView(generics.RetrieveUpdateDestroyAPIView):
     lookup_field = "skill_id"
 
     def get_queryset(self):
-        return Skill.objects.filter(
-            user=self.request.user
-        )
+        return Skill.objects.filter(user=self.request.user)
+
 
 class CertificationListCreateView(generics.ListCreateAPIView):
     serializer_class = CertificationSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return Certification.objects.filter(
-            user=self.request.user
-        )
+        return Certification.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
@@ -227,18 +207,15 @@ class CertificationDetailView(generics.RetrieveUpdateDestroyAPIView):
     lookup_field = "certification_id"
 
     def get_queryset(self):
-        return Certification.objects.filter(
-            user=self.request.user
-        )
+        return Certification.objects.filter(user=self.request.user)
+
 
 class LanguageListCreateView(generics.ListCreateAPIView):
     serializer_class = LanguageSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return Language.objects.filter(
-            user=self.request.user
-        )
+        return Language.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
@@ -250,18 +227,15 @@ class LanguageDetailView(generics.RetrieveUpdateDestroyAPIView):
     lookup_field = "language_id"
 
     def get_queryset(self):
-        return Language.objects.filter(
-            user=self.request.user
-        )
+        return Language.objects.filter(user=self.request.user)
+
 
 class AwardListCreateView(generics.ListCreateAPIView):
     serializer_class = AwardSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return Award.objects.filter(
-            user=self.request.user
-        )
+        return Award.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
@@ -273,18 +247,15 @@ class AwardDetailView(generics.RetrieveUpdateDestroyAPIView):
     lookup_field = "award_id"
 
     def get_queryset(self):
-        return Award.objects.filter(
-            user=self.request.user
-        )
+        return Award.objects.filter(user=self.request.user)
+
 
 class AdditionalInformationListCreateView(generics.ListCreateAPIView):
     serializer_class = AdditionalInformationSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return AdditionalInformation.objects.filter(
-            user=self.request.user
-        )
+        return AdditionalInformation.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
@@ -296,9 +267,9 @@ class AdditionalInformationDetailView(generics.RetrieveUpdateDestroyAPIView):
     lookup_field = "additional_info_id"
 
     def get_queryset(self):
-        return AdditionalInformation.objects.filter(
-            user=self.request.user
-        )
+        return AdditionalInformation.objects.filter(user=self.request.user)
+
+
 class TemplateListView(generics.ListAPIView):
     serializer_class = TemplateSerializer
     permission_classes = [IsAuthenticated]
@@ -306,8 +277,9 @@ class TemplateListView(generics.ListAPIView):
     def get_queryset(self):
         return Template.objects.all()
 
+
 class TemplateDetailView(generics.RetrieveAPIView):
-    serializer_class= TemplateSerializer
+    serializer_class = TemplateSerializer
     permission_classes = [IsAuthenticated]
     lookup_field = "template_id"
 
