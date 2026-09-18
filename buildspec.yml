@@ -1,0 +1,96 @@
+# CI for CraftCV-backend in AWS CodeBuild (project craftcv-backend-ci,
+# eu-west-1). The infrastructure that runs this lives in CraftCV-devops.
+#
+# This file deliberately defines no quality gates of its own. scripts/check.sh
+# is the canonical gate - the Git hooks and .github/workflows/ci.yml already
+# call it, and so does this - so local, Actions and CodeBuild results cannot
+# drift apart.
+
+version: 0.2
+
+env:
+  variables:
+    PIP_CACHE_DIR: /root/.cache/pip
+    PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    # Written by pre_build, sourced by the later phases. CodeBuild does not
+    # promise that a variable exported by one command survives into the next.
+    CI_ENV_FILE: /tmp/ci.env
+
+  # AWS_ACCOUNT_ID, AWS_DEFAULT_REGION and ECR_REPOSITORY_URL are injected by
+  # the CodeBuild project - see codebuild.tf in CraftCV-devops.
+
+phases:
+  install:
+    runtime-versions:
+      # Matches the Dockerfile (python:3.12-slim), PYTHON_VERSION in the
+      # Actions workflow, and target-version in pyproject.toml.
+      python: 3.12
+    commands:
+      - python -m pip install --upgrade pip
+      # requirements.txt for the build/test gates, requirements-dev.txt for ruff.
+      - pip install -r requirements.txt -r requirements-dev.txt
+
+  pre_build:
+    commands:
+      # privileged_mode = true on the project is what makes a daemon available.
+      - docker version
+      - |
+        COMMIT="${CODEBUILD_RESOLVED_SOURCE_VERSION:-unknown}"
+        {
+          echo "export COMMIT='${COMMIT}'"
+          echo "export IMAGE_URI='${ECR_REPOSITORY_URL}:$(printf '%s' "$COMMIT" | cut -c1-12)'"
+        } > "$CI_ENV_FILE"
+        cat "$CI_ENV_FILE"
+      - aws ecr get-login-password --region "$AWS_DEFAULT_REGION" | docker login --username AWS --password-stdin "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com"
+
+  build:
+    commands:
+      # The three gates, same entry point as the hooks and Actions. No
+      # database is provisioned on purpose: with DB_ENGINE unset the project
+      # falls back to SQLite, which is what the suite is written against.
+      - sh scripts/check.sh lint
+      - sh scripts/check.sh build
+      - sh scripts/check.sh test
+
+      # Building on every run keeps the image from rotting unnoticed.
+      - |
+        . "$CI_ENV_FILE"
+        docker build \
+          --tag "$IMAGE_URI" \
+          --label "org.opencontainers.image.revision=${COMMIT}" \
+          --label "org.opencontainers.image.source=https://github.com/AmaliTech-Training-Academy/CraftCV-backend" \
+          .
+
+      # Mirrors the docker job in the Actions workflow: the checks must also
+      # pass inside the image, not just against the source tree.
+      - |
+        . "$CI_ENV_FILE"
+        docker run --rm "$IMAGE_URI" python manage.py check
+
+  post_build:
+    commands:
+      # Publish only from a green build on a mainline branch. The webhook
+      # filters already limit PUSH events to develop and main, so a pull
+      # request build verifies the image without publishing it.
+      - |
+        . "$CI_ENV_FILE"
+        if [ "${CODEBUILD_BUILD_SUCCEEDING:-0}" != "1" ]; then
+          echo "Build failed - not pushing an image."
+          exit 0
+        fi
+        if [ "${CODEBUILD_WEBHOOK_EVENT:-PUSH}" != "PUSH" ]; then
+          echo "Event ${CODEBUILD_WEBHOOK_EVENT}: image verified, not pushed."
+          exit 0
+        fi
+        echo "Pushing ${IMAGE_URI}"
+        docker push "$IMAGE_URI"
+        # ECR tags are immutable, so there is no moving "latest" to chase:
+        # the deploy step pulls this exact tag.
+        echo "Deployable image: ${IMAGE_URI}"
+
+# No reports: section. scripts/check.sh runs `manage.py test`, which emits no
+# JUnit XML - add one only if the suite is moved onto a runner that does.
+
+cache:
+  paths:
+    - /root/.cache/pip/**/*
