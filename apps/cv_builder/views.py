@@ -27,35 +27,6 @@ from .serializers import (
     SkillSerializer,
     TemplateSerializer,
 )
-from rest_framework import generics
-from rest_framework.exceptions import NotFound
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-
-from .models import (
-    CV,
-    AdditionalInformation,
-    Award,
-    Certification,
-    Education,
-    Experience,
-    Language,
-    PersonalDetail,
-    Skill,
-    Template,
-)
-from .serializers import (
-    AdditionalInformationSerializer,
-    AwardSerializer,
-    CertificationSerializer,
-    CVSerializer,
-    EducationSerializer,
-    ExperienceSerializer,
-    LanguageSerializer,
-    PersonalDetailSerializer,
-    SkillSerializer,
-    TemplateSerializer,
-)
 
 
 class CVListCreateView(generics.ListCreateAPIView):
