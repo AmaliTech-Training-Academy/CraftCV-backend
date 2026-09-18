@@ -4,8 +4,12 @@ from rest_framework.test import APIClient
 
 from apps.cv_builder.models import (
     CV,
+    AdditionalInformation,
+    Award,
+    Certification,
     Education,
     Experience,
+    Language,
     Skill,
     Template,
 )
@@ -87,6 +91,68 @@ class CVAPITestCase(TestCase):
                 "design": "professional",
             },
         )
+
+    def test_authenticated_user_can_create_and_list_cv_sections(self):
+        self.authenticate()
+
+        section_cases = [
+            (
+                "educations",
+                {
+                    "institution": "University of Ghana",
+                    "degree": "MSc",
+                    "field_of_study": "Information Technology",
+                    "start_date": "2025-10-01",
+                },
+                Education,
+            ),
+            (
+                "experiences",
+                {
+                    "company": "CraftCV",
+                    "role": "Software Engineer",
+                    "start_date": "2025-10-01",
+                },
+                Experience,
+            ),
+            ("skills", {"name": "Django"}, Skill),
+            (
+                "certifications",
+                {
+                    "name": "AWS Certified Developer",
+                    "issuer": "Amazon Web Services",
+                    "issue_date": "2025-10-01",
+                },
+                Certification,
+            ),
+            (
+                "languages",
+                {"name": "English", "proficiency": "native"},
+                Language,
+            ),
+            ("awards", {"name": "Backend Excellence Award"}, Award),
+            (
+                "additional-information",
+                {"title": "Availability", "content": "Available immediately."},
+                AdditionalInformation,
+            ),
+        ]
+
+        for endpoint, payload, model in section_cases:
+            with self.subTest(endpoint=endpoint):
+                create_response = self.client.post(
+                    f"/api/cvs/{endpoint}/",
+                    payload,
+                    format="json",
+                )
+
+                self.assertEqual(create_response.status_code, 201)
+                self.assertTrue(model.objects.filter(user=self.user).exists())
+
+                list_response = self.client.get(f"/api/cvs/{endpoint}/")
+
+                self.assertEqual(list_response.status_code, 200)
+                self.assertIn(create_response.data, list_response.data)
 
     def test_authenticated_user_can_create_cv(self):
         self.authenticate()
