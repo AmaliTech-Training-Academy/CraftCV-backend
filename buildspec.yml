@@ -88,6 +88,64 @@ phases:
         # the deploy step pulls this exact tag.
         echo "Deployable image: ${IMAGE_URI}"
 
+      # --- Deploy (Phase 6) ---------------------------------------------------
+      # Gating is the whole point here, so it is explicit and it fails closed:
+      #   * a red build never reaches the send-command
+      #   * a pull request build never deploys, whatever branch it came from
+      #   * only a push to develop deploys
+      # A manual build is allowed to deploy, but only when it built develop.
+      - |
+        . "$CI_ENV_FILE"
+
+        if [ "${CODEBUILD_BUILD_SUCCEEDING:-0}" != "1" ]; then
+          echo "DEPLOY SKIPPED: build failed."
+          exit 0
+        fi
+
+        EVENT="${CODEBUILD_WEBHOOK_EVENT:-}"
+        if [ -n "$EVENT" ]; then
+          if [ "$EVENT" != "PUSH" ]; then
+            echo "DEPLOY SKIPPED: event ${EVENT} is not a push (pull request CI never deploys)."
+            exit 0
+          fi
+          if [ "${CODEBUILD_WEBHOOK_HEAD_REF:-}" != "refs/heads/${DEPLOY_BRANCH}" ]; then
+            echo "DEPLOY SKIPPED: push to ${CODEBUILD_WEBHOOK_HEAD_REF:-unknown}, not ${DEPLOY_BRANCH}."
+            exit 0
+          fi
+        else
+          if [ "${CODEBUILD_SOURCE_VERSION:-}" != "${DEPLOY_BRANCH}" ]; then
+            echo "DEPLOY SKIPPED: manual build of ${CODEBUILD_SOURCE_VERSION:-unknown}, not ${DEPLOY_BRANCH}."
+            exit 0
+          fi
+        fi
+
+        echo "Deploying ${COMMIT} to ${DEPLOY_INSTANCE_ID} via ${DEPLOY_DOCUMENT_NAME}"
+        CMD_ID=$(aws ssm send-command       --region "$AWS_DEFAULT_REGION"       --document-name "$DEPLOY_DOCUMENT_NAME"       --instance-ids "$DEPLOY_INSTANCE_ID"       --comment "CodeBuild ${CODEBUILD_BUILD_NUMBER:-manual} ${COMMIT}"       --parameters "CommitSha=${COMMIT}"       --query 'Command.CommandId' --output text)
+        echo "SSM command: ${CMD_ID}"
+
+        # Poll to completion. Without this the build would go green before the
+        # deploy had actually finished, which is worse than no deploy at all.
+        STATUS=Pending
+        for i in $(seq 1 120); do
+          STATUS=$(aws ssm get-command-invocation         --region "$AWS_DEFAULT_REGION"         --command-id "$CMD_ID" --instance-id "$DEPLOY_INSTANCE_ID"         --query 'Status' --output text 2>/dev/null || echo Pending)
+          case "$STATUS" in
+            Success|Failed|Cancelled|TimedOut) break ;;
+          esac
+          sleep 10
+        done
+
+        echo "----- deploy output -----"
+        aws ssm get-command-invocation --region "$AWS_DEFAULT_REGION"       --command-id "$CMD_ID" --instance-id "$DEPLOY_INSTANCE_ID"       --query 'StandardOutputContent' --output text || true
+        ERRS=$(aws ssm get-command-invocation --region "$AWS_DEFAULT_REGION"       --command-id "$CMD_ID" --instance-id "$DEPLOY_INSTANCE_ID"       --query 'StandardErrorContent' --output text || true)
+        [ -n "$ERRS" ] && { echo "----- deploy stderr -----"; echo "$ERRS"; }
+        echo "-------------------------"
+
+        if [ "$STATUS" != "Success" ]; then
+          echo "DEPLOY FAILED (${STATUS})"
+          exit 1
+        fi
+        echo "DEPLOY OK: ${DEPLOY_BRANCH} is now at ${COMMIT}"
+
 # No reports: section. scripts/check.sh runs `manage.py test`, which emits no
 # JUnit XML - add one only if the suite is moved onto a runner that does.
 
