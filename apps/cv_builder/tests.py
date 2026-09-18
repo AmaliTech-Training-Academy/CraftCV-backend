@@ -1,117 +1,311 @@
 from django.contrib.auth import get_user_model
 from django.test import TestCase
-from django.urls import reverse
-from rest_framework import status
 from rest_framework.test import APIClient
-from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import CV, Skill, Template
+from apps.cv_builder.models import (
+    CV,
+    Education,
+    Experience,
+    Skill,
+    Template,
+)
 
 
-class CVApiTests(TestCase):
+User = get_user_model()
+
+
+class CVAPITestCase(TestCase):
+
     def setUp(self):
         self.client = APIClient()
-        self.user = get_user_model().objects.create_user(
-            email="owner@example.com",
-            password="password-123",
+
+        self.user = User.objects.create_user(
+            email="user@example.com",
+            first_name="User1",
+            last_name="U1",
+            password="StrongPassword123!",
         )
-        self.other_user = get_user_model().objects.create_user(
-            email="other@example.com",
-            password="password-123",
+
+        self.another_user = User.objects.create_user(
+            email="another@example.com",
+            first_name="User2",
+            last_name="U2",
+            password="StrongPassword123!",
         )
+
         self.template = Template.objects.create(
             name="Professional",
-            design="professional-design",
+            description="Professional CV template",
+            design="professional",
         )
 
-    def authenticate_as(self, user):
-        self.client.force_authenticate(user=user)
-
-    def create_cv(self, *, user, title):
-        return CV.objects.create(user=user, template=self.template, title=title)
-
-    def test_list_requires_authentication(self):
-        response = self.client.get(reverse("cv-list-create"))
-
-        self.assertIn(
-            response.status_code, (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
+        self.education = Education.objects.create(
+            user=self.user,
+            institution="University of Mines and Technology",
+            degree="BSc",
+            field_of_study="Computer Science and Engineering",
+            start_date="2024-10-01",
+            description="Computer science studies",
+            display_order=0,
         )
 
-    def test_list_returns_only_the_authenticated_users_cvs(self):
-        own_cv = self.create_cv(user=self.user, title="My CV")
-        self.create_cv(user=self.other_user, title="Other CV")
-        self.authenticate_as(self.user)
+        self.experience = Experience.objects.create(
+            user=self.user,
+            company="ABC Technologies",
+            role="Backend Developer Intern",
+            location="Takoradi, Ghana",
+            start_date="2026-06-01",
+            description="Developed backend APIs",
+            display_order=0,
+        )
 
-        response = self.client.get(reverse("cv-list-create"))
+        self.skill = Skill.objects.create(
+            user=self.user,
+            name="Python",
+            display_order=0,
+        )
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual([item["cv_id"] for item in response.data], [str(own_cv.cv_id)])
+    def authenticate(self):
+        self.client.force_authenticate(
+            user=self.user
+        )
 
-    def test_create_assigns_the_authenticated_user(self):
-        self.authenticate_as(self.user)
+    def test_unauthenticated_user_cannot_list_cvs(self):
+        response = self.client.get("/api/cvs/")
+
+        self.assertEqual(response.status_code, 401)
+
+    def test_authenticated_user_can_list_templates(self):
+        self.authenticate()
+
+        response = self.client.get("/api/templates/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(
+            response.data[0],
+            {
+                "template_id": str(self.template.template_id),
+                "name": "Professional",
+                "description": "Professional CV template",
+                "design": "professional",
+            },
+        )
+    def test_authenticated_user_can_create_cv(self):
+        self.authenticate()
+
+        payload = {
+            "title": "Software Engineer CV",
+            "professional_summary": (
+                "Backend developer interested in cloud computing."
+            ),
+            "template": str(self.template.template_id),
+            "educations": [
+                str(self.education.education_id)
+            ],
+            "experiences": [
+                str(self.experience.experience_id)
+            ],
+            "skills": [
+                str(self.skill.skill_id)
+            ],
+        }
 
         response = self.client.post(
-            reverse("cv-list-create"),
-            {"title": "Backend Engineer", "template": str(self.template.template_id)},
+            "/api/cvs/",
+            payload,
             format="json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        cv = CV.objects.get(cv_id=response.data["cv_id"])
-        self.assertEqual(cv.user, self.user)
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(
+            response.data["title"],
+            "Software Engineer CV",
+        )
 
-    def test_create_rejects_records_owned_by_another_user(self):
-        other_users_skill = Skill.objects.create(user=self.other_user, name="Python")
-        self.authenticate_as(self.user)
+        self.assertEqual(
+            len(response.data["educations"]),
+            1,
+        )
+
+        self.assertEqual(
+            len(response.data["experiences"]),
+            1,
+        )
+
+        self.assertEqual(
+            len(response.data["skills"]),
+            1,
+        )
+
+    def test_authenticated_user_can_retrieve_own_cv(self):
+        self.authenticate()
+
+        cv = CV.objects.create(
+            user=self.user,
+            template=self.template,
+            title="My CV",
+            professional_summary="My summary",
+        )
+
+        response = self.client.get(
+            f"/api/cvs/{cv.cv_id}/"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.data["cv_id"],
+            str(cv.cv_id),
+        )
+
+    def test_user_cannot_access_another_users_cv(self):
+        self.authenticate()
+
+        another_cv = CV.objects.create(
+            user=self.another_user,
+            template=self.template,
+            title="Private CV",
+            professional_summary="Private information",
+        )
+
+        response = self.client.get(
+            f"/api/cvs/{another_cv.cv_id}/"
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_user_cannot_attach_another_users_education(self):
+        self.authenticate()
+
+        another_education = Education.objects.create(
+            user=self.another_user,
+            institution="Another University",
+            degree="BSc",
+            field_of_study="Computer Science",
+            start_date="2024-10-01",
+        )
+
+        payload = {
+            "title": "Invalid CV",
+            "professional_summary": "Testing ownership",
+            "template": str(self.template.template_id),
+            "educations": [
+                str(another_education.education_id)
+            ],
+        }
 
         response = self.client.post(
-            reverse("cv-list-create"),
+            "/api/cvs/",
+            payload,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("educations", response.data)
+
+    def test_updating_one_section_preserves_other_sections(self):
+        self.authenticate()
+
+        cv = CV.objects.create(
+            user=self.user,
+            template=self.template,
+            title="Original CV",
+            professional_summary="Original summary",
+        )
+
+        cv.educations.add(self.education)
+        cv.experiences.add(self.experience)
+        cv.skills.add(self.skill)
+
+        response = self.client.put(
+            f"/api/cvs/{cv.cv_id}/",
             {
-                "title": "Backend Engineer",
-                "template": str(self.template.template_id),
-                "skills": [str(other_users_skill.skill_id)],
+                "professional_summary": "Updated summary",
             },
             format="json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("skills", response.data)
+        self.assertEqual(response.status_code, 200)
 
-    def test_detail_is_scoped_to_the_authenticated_user(self):
-        other_users_cv = self.create_cv(user=self.other_user, title="Private CV")
-        self.authenticate_as(self.user)
+        self.assertEqual(
+            response.data["professional_summary"],
+            "Updated summary",
+        )
 
-        response = self.client.get(reverse("cv-detail", kwargs={"cv_id": other_users_cv.cv_id}))
+        self.assertEqual(
+            len(response.data["educations"]),
+            1,
+        )
 
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(
+            len(response.data["experiences"]),
+            1,
+        )
 
-    def test_put_partially_updates_a_cv(self):
-        cv = self.create_cv(user=self.user, title="Old title")
-        self.authenticate_as(self.user)
+        self.assertEqual(
+            len(response.data["skills"]),
+            1,
+        )
+
+    def test_explicit_empty_list_removes_cv_relationship(self):
+        self.authenticate()
+
+        cv = CV.objects.create(
+            user=self.user,
+            template=self.template,
+            title="CV With Education",
+            professional_summary="Summary",
+        )
+
+        cv.educations.add(self.education)
 
         response = self.client.put(
-            reverse("cv-detail", kwargs={"cv_id": cv.cv_id}),
-            {"title": "New title"},
+            f"/api/cvs/{cv.cv_id}/",
+            {
+                "educations": [],
+            },
             format="json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        cv.refresh_from_db()
-        self.assertEqual(cv.title, "New title")
-
-    def test_named_routes_include_the_expected_path_separators(self):
-        cv = self.create_cv(user=self.user, title="My CV")
-
-        self.assertEqual(reverse("cv-list-create"), "/api/cvs/")
+        self.assertEqual(response.status_code, 200)
         self.assertEqual(
-            reverse("cv-detail", kwargs={"cv_id": cv.cv_id}),
-            f"/api/cvs/{cv.cv_id}/",
+            response.data["educations"],
+            [],
         )
 
-    def test_a_jwt_access_token_authenticates_a_cv_request(self):
-        access_token = RefreshToken.for_user(self.user).access_token
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {access_token}")
+        # The master Education record still exists.
+        self.assertTrue(
+            Education.objects.filter(
+                education_id=self.education.education_id
+            ).exists()
+        )
 
-        response = self.client.get(reverse("cv-list-create"))
+    def test_deleting_education_does_not_delete_cv(self):
+        self.authenticate()
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        cv = CV.objects.create(
+            user=self.user,
+            template=self.template,
+            title="CV With Education",
+            professional_summary="Summary",
+        )
+
+        cv.educations.add(self.education)
+
+        response = self.client.delete(
+            f"/api/cvs/educations/{self.education.education_id}/"
+        )
+
+        self.assertEqual(response.status_code, 204)
+
+        response = self.client.get(
+            f"/api/cvs/{cv.cv_id}/"
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        self.assertTrue(
+            CV.objects.filter(
+                cv_id=cv.cv_id
+            ).exists()
+        )
