@@ -43,8 +43,13 @@ phases:
 
             sh scripts/validate-conventions.sh branch "$HEAD_BRANCH" || exit 1
 
-            git fetch --quiet origin "$BASE" || { echo "could not fetch ${BASE}"; exit 1; }
-            MERGE_BASE=$(git merge-base FETCH_HEAD HEAD)
+            # Deliberately no `git fetch`: CodeBuild clones with credentials
+            # it then discards, so a fetch here fails with "could not read
+            # Username". It is also unnecessary - git_clone_depth = 0 means
+            # the clone already carries every remote-tracking ref.
+            BASE_REF="origin/${BASE}"
+            git rev-parse --verify --quiet "$BASE_REF" >/dev/null               || { echo "base ref ${BASE_REF} is not in the clone"; exit 1; }
+            MERGE_BASE=$(git merge-base "$BASE_REF" HEAD)
             echo "Comparing ${MERGE_BASE}..HEAD"
 
             # Read from a file, not a pipe: a pipeline would put the loop in a
