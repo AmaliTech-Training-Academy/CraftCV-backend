@@ -27,6 +27,7 @@ urlpatterns = [
     path("api/docs/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
     path("api/", include("apps.users.urls")),
     path("api/cvs/", include("apps.cv_builder.urls")),
+    path("api/templates/", include("apps.cv_builder.template_urls"))
 ]
 
 
