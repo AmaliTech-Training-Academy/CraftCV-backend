@@ -19,11 +19,25 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class UserCreateSerializer(serializers.ModelSerializer):
+    email = serializers.EmailField(
+        write_only=True,
+        error_messages={
+            "blank": "Email field cannot be empty.",
+            "required": "Email is required.",
+        },
+    )
+    password = serializers.CharField(
+        write_only=True,
+        error_messages={
+            "blank": "Password field cannot be empty.",
+            "required": "Password is required.",
+        },
+    )
     agree_to_terms = serializers.BooleanField(required=True)
 
     class Meta:
         model = User
-        fields = ["email", "first_name", "last_name", "other_name", "password", "agree_to_terms"]
+        fields = ["email", "password", "agree_to_terms"]
 
     def validate_email(self, value):
         if User.objects.filter(email__iexact=value).exists():
@@ -48,3 +62,12 @@ class TokenPayloadSerializer(serializers.Serializer):
     user = UserSerializer()
     access = serializers.CharField()
     refresh = serializers.CharField()
+
+
+class ForgotPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField(
+        error_messages={
+            "blank": "Email cannot be empty.",
+            "required": "Email is required.",
+        }
+    )
