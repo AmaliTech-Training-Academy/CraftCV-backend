@@ -10,9 +10,6 @@ class UserSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "email",
-            "first_name",
-            "last_name",
-            "other_name",
             "created_at",
         ]
         read_only_fields = ["id", "created_at"]
@@ -56,6 +53,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
 class LoginSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True, style={"input_type": "password"})
+    remember_me = serializers.BooleanField(default=False)
 
 
 class TokenPayloadSerializer(serializers.Serializer):

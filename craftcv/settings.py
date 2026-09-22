@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 
 import os
 import sys
+from datetime import timedelta
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -216,9 +217,14 @@ SIMPLE_JWT = {
 }
 
 
-
-CORS_ALLOW_ALL_ORIGINS = env_bool('CORS_ALLOW_ALL_ORIGINS', default=False)
+CORS_ALLOW_ALL_ORIGINS = env_bool("CORS_ALLOW_ALL_ORIGINS", default=False)
 
 CORS_ALLOW_CREDENTIALS = True
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=15),
+    "ROTATE_REFRESH_TOKENS": True,
+}
 
 # CORS_ALLOWED_ORIGINS = []
