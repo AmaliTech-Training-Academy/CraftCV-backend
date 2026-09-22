@@ -7,7 +7,12 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from apps.users.models import VerificationCode
+from apps.users.services.email import send_password_reset_code
+from apps.users.services.verification import issue_code
+
 from .serializers import (
+    ForgotPasswordSerializer,
     LoginSerializer,
     TokenPayloadSerializer,
     UserCreateSerializer,
@@ -21,7 +26,7 @@ class AuthViewSet(viewsets.GenericViewSet):
     permission_classes = [AllowAny]
 
     def get_permissions(self):
-        if self.action in ("register", "login"):
+        if self.action in ("register", "login", "forgot_password"):
             return [AllowAny()]
         return [IsAuthenticated()]
 
@@ -30,6 +35,8 @@ class AuthViewSet(viewsets.GenericViewSet):
             return UserCreateSerializer
         elif self.action == "login":
             return LoginSerializer
+        elif self.action == 'forgot_password':
+            return ForgotPasswordSerializer
         return UserSerializer
 
     def _token_payload(self, user):
@@ -104,3 +111,43 @@ class AuthViewSet(viewsets.GenericViewSet):
     )
     def me(self, request):
         return Response(self.get_serializer(request.user).data)
+
+    @extend_schema(
+        operation_id="auth_forgot_password",
+        summary="Request password reset code",
+        description=(
+            "Send a reset code to the given email if an account exists. "
+            "Always returns the same generic response to prevent account enumeration."
+        ),
+        request=ForgotPasswordSerializer,
+        responses={
+            200: OpenApiResponse(description="Generic success"),
+        },
+        tags=["Authentication"],
+    )
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="forgot-password",
+        permission_classes=[AllowAny],
+    )
+    def forgot_password(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user = User.objects.filter(
+            email__iexact=serializer.validated_data["email"]
+        ).first()
+
+        if user is not None:
+            raw = issue_code(user, VerificationCode.Purpose.PASSWORD_RESET)
+            send_password_reset_code(user.email, raw)
+
+        return Response(
+            {
+                "message": (
+                    "If an account exists for this email, a password reset code has been sent."
+                )
+            },
+            status=status.HTTP_200_OK,
+        )
