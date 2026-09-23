@@ -31,7 +31,7 @@ def issue_code(user, purpose: str, ttl: timedelta = DEFAULT_TTL) -> str:
     return raw
 
 
-def verify_code(user, purpose: str, raw: str) -> bool:
+def verify_code(user, purpose: str, raw: str, consume: bool = True) -> bool:
 
     if not raw:
         return False
@@ -46,6 +46,7 @@ def verify_code(user, purpose: str, raw: str) -> bool:
     if not check_password(raw, code.code_hash):
         return False
 
-    code.used_at = timezone.now()
-    code.save(update_fields=["used_at"])
+    if consume:
+        code.used_at = timezone.now()
+        code.save(update_fields=["used_at"])
     return True

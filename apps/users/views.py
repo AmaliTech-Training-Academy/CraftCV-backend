@@ -11,16 +11,14 @@ from apps.users.models import VerificationCode
 from apps.users.services.email import send_password_reset_code
 from apps.users.services.verification import issue_code, verify_code
 
-
 from .schema import auth_schema
-
-
 from .serializers import (
     ForgotPasswordSerializer,
     LoginSerializer,
     ResetPasswordSerializer,
     UserCreateSerializer,
     UserSerializer,
+    VerifyCodeSerializer,
 )
 
 User = get_user_model()
@@ -31,7 +29,7 @@ class AuthViewSet(viewsets.GenericViewSet):
     permission_classes = [AllowAny]
 
     def get_permissions(self):
-        if self.action in ("register", "login", "forgot_password"):
+        if self.action in ("register", "login", "forgot_password", "verify_code", "reset_password"):
             return [AllowAny()]
         return [IsAuthenticated()]
 
@@ -42,6 +40,10 @@ class AuthViewSet(viewsets.GenericViewSet):
             return LoginSerializer
         elif self.action == "forgot_password":
             return ForgotPasswordSerializer
+        elif self.action == "verify_code":
+            return VerifyCodeSerializer
+        elif self.action == "reset_password":
+            return ResetPasswordSerializer
         return UserSerializer
 
     def _token_payload(self, user):
@@ -114,11 +116,36 @@ class AuthViewSet(viewsets.GenericViewSet):
     @action(
         detail=False,
         methods=["post"],
+        url_path="verify-code",
+        permission_classes=[AllowAny],
+    )
+    def verify_code(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user = User.objects.filter(email__iexact=serializer.validated_data["email"]).first()
+
+        if user is None or not verify_code(
+            user,
+            VerificationCode.Purpose.PASSWORD_RESET,
+            serializer.validated_data["code"],
+            consume=False,
+        ):
+            return Response(
+                {"error": "Invalid or expired reset code."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response({"valid": True}, status=status.HTTP_200_OK)
+
+    @action(
+        detail=False,
+        methods=["post"],
         url_path="reset-password",
         permission_classes=[AllowAny],
     )
     def reset_password(self, request):
-        serializer = ResetPasswordSerializer(data=request.data)
+        serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         email = serializer.validated_data["email"]

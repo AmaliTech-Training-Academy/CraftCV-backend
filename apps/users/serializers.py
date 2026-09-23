@@ -72,6 +72,24 @@ class ForgotPasswordSerializer(serializers.Serializer):
     )
 
 
+class VerifyCodeSerializer(serializers.Serializer):
+    email = serializers.EmailField(
+        error_messages={
+            "blank": "Email cannot be empty.",
+            "required": "Email is required.",
+        }
+    )
+    code = serializers.CharField(
+        min_length=6,
+        max_length=6,
+        error_messages={
+            "blank": "Code cannot be empty.",
+            "min_length": "Code must be 6 digits.",
+            "max_length": "Code must be 6 digits.",
+        },
+    )
+
+
 class ResetPasswordSerializer(serializers.Serializer):
     email = serializers.EmailField(
         error_messages={

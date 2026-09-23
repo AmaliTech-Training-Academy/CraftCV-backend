@@ -8,6 +8,7 @@ from .serializers import (
     TokenPayloadSerializer,
     UserCreateSerializer,
     UserSerializer,
+    VerifyCodeSerializer,
 )
 
 auth_schema = {
@@ -50,6 +51,21 @@ auth_schema = {
             "Always returns the same generic response to prevent account enumeration."
         ),
         request=ForgotPasswordSerializer,
+        responses={
+            200: OpenApiResponse(description="Generic success"),
+        },
+        tags=["Authentication"],
+    ),
+    "verify_code": extend_schema(
+        operation_id="auth_verify_code",
+        summary="Verification of code sent via email",
+        description=(
+            "Check whether a reset code is valid without consuming it. "
+            "Called before showing the new-password form. "
+            "Returns the same generic error for any invalid, expired, or "
+            "mismatched code to avoid leaking information."
+        ),
+        request=VerifyCodeSerializer,
         responses={
             200: OpenApiResponse(description="Generic success"),
         },
