@@ -1,7 +1,8 @@
 #!/bin/sh
 
 # Rejects a push whose branch name or commit subjects break the conventions in
-# CONTRIBUTING.md, then runs the build and unit tests. Git feeds one line per
+# CONTRIBUTING.md, or whose branch already has an open pull request, then runs
+# the build and unit tests. Git feeds one line per
 # pushed ref on stdin:
 #   <local ref> <local sha> <remote ref> <remote sha>
 
@@ -26,6 +27,12 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 
   pushing_branch=1
   sh "$validate" branch "$branch" || status=1
+
+  # A branch already under review should not change underneath its
+  # reviewers. Advisory, and skippable for a genuine review fix.
+  if [ "${SKIP_PR_LOCK:-0}" != "1" ]; then
+    sh "$repo_root/scripts/check.sh" pr-open "$branch" || status=1
+  fi
 
   # An all-zero remote sha means the branch is new on the remote, so check every
   # commit that is not yet on any remote-tracking branch.

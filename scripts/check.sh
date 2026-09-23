@@ -8,6 +8,7 @@
 #   sh scripts/check.sh build           Django system checks + missing migrations
 #   sh scripts/check.sh test            Django unit tests
 #   sh scripts/check.sh all             everything above
+#   sh scripts/check.sh pr-open <branch>  fail if that branch has an open PR
 #
 # Set PYTHON to choose an interpreter; otherwise a project venv is used when one
 # exists, falling back to python3/python on PATH.
@@ -224,8 +225,94 @@ EOF
   exit 1
 }
 
+# Fails when the branch already has an open pull request. Once a branch is up
+# for review, further pushes change what reviewers have already read, so the
+# follow-up work belongs on a new branch and a new pull request.
+#
+# Advisory by design. It needs network and a token, and neither is
+# guaranteed, so anything it cannot determine is allowed through with a
+# warning - a hook that blocks work on a train with no signal is worse than
+# no hook. Real enforcement would need a server-side rule, which github.com
+# does not offer outside Enterprise Server.
+run_pr_open() {
+  branch=${1:-}
+  [ -n "$branch" ] || fail "Usage: $0 pr-open <branch>"
+
+  # Protected branches are not reviewed through their own pull request.
+  if sh "$repo_root/scripts/validate-conventions.sh" is-protected "$branch"; then
+    return 0
+  fi
+
+  remote_url=$(git remote get-url origin 2>/dev/null || echo "")
+  # Strip any embedded credential, the scheme, the host and a .git suffix.
+  slug=$(printf '%s' "$remote_url" |
+    sed -e 's#^[a-z]*://##' -e 's#^[^@]*@##' -e 's#^github\.com[:/]##' -e 's#\.git$##')
+  case "$slug" in
+    */*) ;;
+    *) printf '[check] pr-open: could not read owner/repo from the remote, skipping
+' >&2
+       return 0 ;;
+  esac
+  owner=${slug%%/*}
+
+  count=""
+
+  # Only trust gh when it is actually authenticated. Unauthenticated, it
+  # answers "0" with exit 0 for a private repository, which would silently
+  # turn this check into a no-op for everyone who has not run gh auth login.
+  if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+    count=$(gh pr list --repo "$slug" --head "$branch" --state open               --json number --jq 'length' 2>/dev/null || echo "")
+  fi
+
+  if [ -z "$count" ]; then
+    token=${GH_TOKEN:-${GITHUB_TOKEN:-}}
+    if [ -n "$token" ] && command -v curl >/dev/null 2>&1; then
+      response=$(mktemp)
+      # Trust the body only on a 200. An expired token returns 401 and a
+      # private repo returns 404, neither of which means "no open PR".
+      http=$(curl -sS --max-time 10 -o "$response" -w '%{http_code}'         -H "Authorization: Bearer $token"         -H "Accept: application/vnd.github+json"         "https://api.github.com/repos/${slug}/pulls?state=open&head=${owner}:${branch}"         2>/dev/null || echo "000")
+      # One "number" key per pull request in the array. Only zero versus
+      # non-zero matters, so a nested key inflating the count is harmless.
+      [ "$http" = "200" ] && count=$(grep -c '"number"' "$response" || true)
+      rm -f "$response"
+    fi
+  fi
+
+  if [ -z "$count" ]; then
+    cat >&2 <<EOF
+[check] pr-open: could not ask GitHub whether '$branch' already has an open
+        pull request, so the push is allowed. To enable this check, either
+        run 'gh auth login' or export GH_TOKEN with a token that can read
+        this repository.
+EOF
+    return 0
+  fi
+
+  [ "$count" -eq 0 ] 2>/dev/null && return 0
+
+  cat >&2 <<EOF
+
+Branch '$branch' already has an open pull request.
+
+Pushing to it now changes code reviewers have already read, and the approval
+they gave no longer describes what would merge. Put the follow-up work on its
+own branch instead:
+
+    git switch -c <type>/crf-<ticket-number>-<short-description>
+    git push -u origin HEAD
+
+If the change genuinely belongs on this pull request - a fix for a review
+comment, say - this check is advisory and you can pass it deliberately:
+
+    SKIP_PR_LOCK=1 git push
+
+See CONTRIBUTING.md.
+EOF
+  exit 1
+}
+
 [ "$#" -ge 1 ] ||
-  fail "Usage: $0 lint [--staged] | tests-required [path...] | build | test | all"
+  fail "Usage: $0 lint [--staged] | tests-required [path...] | build | test | all | pr-open <branch>"
 
 case "$1" in
   lint) shift; run_lint "$@" ;;
@@ -233,5 +320,6 @@ case "$1" in
   build) run_build ;;
   test) run_test ;;
   all) run_lint; run_build; run_test ;;
-  *) fail "Unknown check '$1'. Use lint, tests-required, build, test, or all." ;;
+  pr-open) shift; run_pr_open "$@" ;;
+  *) fail "Unknown check '$1'. Use lint, tests-required, build, test, all, or pr-open." ;;
 esac
