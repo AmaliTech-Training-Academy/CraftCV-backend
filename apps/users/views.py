@@ -1,5 +1,5 @@
 from django.contrib.auth import authenticate, get_user_model
-from drf_spectacular.utils import OpenApiResponse, extend_schema
+from drf_spectacular.utils import extend_schema_view
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -9,12 +9,16 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.users.models import VerificationCode
 from apps.users.services.email import send_password_reset_code
-from apps.users.services.verification import issue_code
+from apps.users.services.verification import issue_code, verify_code
+
+
+from .schema import auth_schema
+
 
 from .serializers import (
     ForgotPasswordSerializer,
     LoginSerializer,
-    TokenPayloadSerializer,
+    ResetPasswordSerializer,
     UserCreateSerializer,
     UserSerializer,
 )
@@ -22,6 +26,7 @@ from .serializers import (
 User = get_user_model()
 
 
+@extend_schema_view(**auth_schema)
 class AuthViewSet(viewsets.GenericViewSet):
     permission_classes = [AllowAny]
 
@@ -35,7 +40,7 @@ class AuthViewSet(viewsets.GenericViewSet):
             return UserCreateSerializer
         elif self.action == "login":
             return LoginSerializer
-        elif self.action == 'forgot_password':
+        elif self.action == "forgot_password":
             return ForgotPasswordSerializer
         return UserSerializer
 
@@ -47,19 +52,6 @@ class AuthViewSet(viewsets.GenericViewSet):
             "refresh": str(refresh),
         }
 
-    @extend_schema(
-        operation_id="auth_register",
-        summary="Register a new user",
-        description="Create a new account and return JWT access & refresh tokens.",
-        request=UserCreateSerializer,
-        responses={
-            201: OpenApiResponse(
-                response=TokenPayloadSerializer,
-                description="User registered successfully",
-            ),
-        },
-        tags=["Authentication"],
-    )
     @action(detail=False, methods=["post"], url_path="register")
     def register(self, request):
         serializer = self.get_serializer(data=request.data)
@@ -67,17 +59,6 @@ class AuthViewSet(viewsets.GenericViewSet):
         user = serializer.save()
         return Response(self._token_payload(user), status=status.HTTP_201_CREATED)
 
-    @extend_schema(
-        operation_id="auth_login",
-        summary="Log in",
-        description="Authenticate with email and password and return JWT tokens.",
-        request=LoginSerializer,
-        responses={
-            200: TokenPayloadSerializer,
-            401: OpenApiResponse(description="Invalid email or password"),
-        },
-        tags=["Authentication"],
-    )
     @action(detail=False, methods=["post"], url_path="login")
     def login(self, request):
         serializer = self.get_serializer(data=request.data)
@@ -95,13 +76,6 @@ class AuthViewSet(viewsets.GenericViewSet):
 
         return Response(self._token_payload(user), status=status.HTTP_200_OK)
 
-    @extend_schema(
-        operation_id="auth_me",
-        summary="Get current user",
-        description="Return the profile of the currently authenticated user.",
-        responses={200: UserSerializer},
-        tags=["Authentication"],
-    )
     @action(
         detail=False,
         methods=["get"],
@@ -112,19 +86,6 @@ class AuthViewSet(viewsets.GenericViewSet):
     def me(self, request):
         return Response(self.get_serializer(request.user).data)
 
-    @extend_schema(
-        operation_id="auth_forgot_password",
-        summary="Request password reset code",
-        description=(
-            "Send a reset code to the given email if an account exists. "
-            "Always returns the same generic response to prevent account enumeration."
-        ),
-        request=ForgotPasswordSerializer,
-        responses={
-            200: OpenApiResponse(description="Generic success"),
-        },
-        tags=["Authentication"],
-    )
     @action(
         detail=False,
         methods=["post"],
@@ -135,9 +96,7 @@ class AuthViewSet(viewsets.GenericViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        user = User.objects.filter(
-            email__iexact=serializer.validated_data["email"]
-        ).first()
+        user = User.objects.filter(email__iexact=serializer.validated_data["email"]).first()
 
         if user is not None:
             raw = issue_code(user, VerificationCode.Purpose.PASSWORD_RESET)
@@ -149,5 +108,43 @@ class AuthViewSet(viewsets.GenericViewSet):
                     "If an account exists for this email, a password reset code has been sent."
                 )
             },
+            status=status.HTTP_200_OK,
+        )
+
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="reset-password",
+        permission_classes=[AllowAny],
+    )
+    def reset_password(self, request):
+        serializer = ResetPasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        email = serializer.validated_data["email"]
+        code = serializer.validated_data["code"]
+        new_password = serializer.validated_data["new_password"]
+
+        GENERIC_ERROR = "Invalid or expired reset code."
+
+        user = User.objects.filter(email__iexact=email).first()
+
+        if user is None:
+            return Response(
+                {"error": GENERIC_ERROR},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not verify_code(user, VerificationCode.Purpose.PASSWORD_RESET, code):
+            return Response(
+                {"error": GENERIC_ERROR},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user.set_password(new_password)
+        user.save(update_fields=["password"])
+
+        return Response(
+            {"message": "Password reset successfully."},
             status=status.HTTP_200_OK,
         )

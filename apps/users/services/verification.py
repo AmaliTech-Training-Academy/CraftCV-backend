@@ -6,7 +6,7 @@ from django.utils import timezone
 
 from apps.users.models import VerificationCode
 
-DEFAULT_TTL = timedelta(minutes=20)
+DEFAULT_TTL = timedelta(minutes=15)
 CODE_LENGTH = 6
 
 
