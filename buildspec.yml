@@ -1,0 +1,195 @@
+# CI for CraftCV-backend in AWS CodeBuild (project craftcv-backend-ci,
+# eu-west-1). The infrastructure that runs this lives in CraftCV-devops.
+#
+# This file deliberately defines no quality gates of its own. scripts/check.sh
+# is the canonical gate - the Git hooks and .github/workflows/ci.yml already
+# call it, and so does this - so local, Actions and CodeBuild results cannot
+# drift apart.
+
+version: 0.2
+
+env:
+  variables:
+    PIP_CACHE_DIR: /root/.cache/pip
+    PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    # Written by pre_build, sourced by the later phases. CodeBuild does not
+    # promise that a variable exported by one command survives into the next.
+    CI_ENV_FILE: /tmp/ci.env
+
+  # AWS_ACCOUNT_ID, AWS_DEFAULT_REGION and ECR_REPOSITORY_URL are injected by
+  # the CodeBuild project - see codebuild.tf in CraftCV-devops.
+
+phases:
+  install:
+    runtime-versions:
+      # Matches the Dockerfile (python:3.12-slim), PYTHON_VERSION in the
+      # Actions workflow, and target-version in pyproject.toml.
+      python: 3.12
+    commands:
+      # --- Repository conventions -----------------------------------------
+      # Was the repository-standards GitHub Actions workflow. It runs here
+      # first, before anything expensive, because a badly named branch should
+      # cost seconds not minutes.
+      #
+      # Pull requests only: develop and main are protected branches whose
+      # history has already been through this check, and validate-conventions
+      # exempts them by design.
+      - |
+        case "${CODEBUILD_WEBHOOK_EVENT:-}" in
+          PULL_REQUEST_*)
+            BASE="${CODEBUILD_WEBHOOK_BASE_REF#refs/heads/}"
+            HEAD_BRANCH="${CODEBUILD_WEBHOOK_HEAD_REF#refs/heads/}"
+            echo "Checking conventions: ${HEAD_BRANCH} -> ${BASE}"
+
+            sh scripts/validate-conventions.sh branch "$HEAD_BRANCH" || exit 1
+
+            # Deliberately no `git fetch`: CodeBuild clones with credentials
+            # it then discards, so a fetch here fails with "could not read
+            # Username". It is also unnecessary - git_clone_depth = 0 means
+            # the clone already carries every remote-tracking ref.
+            BASE_REF="origin/${BASE}"
+            git rev-parse --verify --quiet "$BASE_REF" >/dev/null               || { echo "base ref ${BASE_REF} is not in the clone"; exit 1; }
+            MERGE_BASE=$(git merge-base "$BASE_REF" HEAD)
+            echo "Comparing ${MERGE_BASE}..HEAD"
+
+            # Read from a file, not a pipe: a pipeline would put the loop in a
+            # subshell and swallow the failing exit status.
+            git log --format=%s "${MERGE_BASE}..HEAD" > /tmp/subjects
+            while IFS= read -r subject; do
+              [ -n "$subject" ] || continue
+              sh scripts/validate-conventions.sh commit "$subject" || exit 1
+            done < /tmp/subjects
+
+            git diff --check "${MERGE_BASE}..HEAD" || { echo "whitespace errors above"; exit 1; }
+            echo "Conventions OK"
+            ;;
+          *)
+            echo "Not a pull request - skipping convention checks."
+            ;;
+        esac
+      - python -m pip install --upgrade pip
+      # requirements.txt for the build/test gates, requirements-dev.txt for ruff.
+      - pip install -r requirements.txt -r requirements-dev.txt
+
+  pre_build:
+    commands:
+      # privileged_mode = true on the project is what makes a daemon available.
+      - docker version
+      - |
+        COMMIT="${CODEBUILD_RESOLVED_SOURCE_VERSION:-unknown}"
+        {
+          echo "export COMMIT='${COMMIT}'"
+          echo "export IMAGE_URI='${ECR_REPOSITORY_URL}:$(printf '%s' "$COMMIT" | cut -c1-12)'"
+        } > "$CI_ENV_FILE"
+        cat "$CI_ENV_FILE"
+      - aws ecr get-login-password --region "$AWS_DEFAULT_REGION" | docker login --username AWS --password-stdin "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com"
+
+  build:
+    commands:
+      # The three gates, same entry point as the hooks and Actions. No
+      # database is provisioned on purpose: with DB_ENGINE unset the project
+      # falls back to SQLite, which is what the suite is written against.
+      - sh scripts/check.sh lint
+      - sh scripts/check.sh build
+      - sh scripts/check.sh test
+
+      # Building on every run keeps the image from rotting unnoticed.
+      - |
+        . "$CI_ENV_FILE"
+        docker build \
+          --tag "$IMAGE_URI" \
+          --label "org.opencontainers.image.revision=${COMMIT}" \
+          --label "org.opencontainers.image.source=https://github.com/AmaliTech-Training-Academy/CraftCV-backend" \
+          .
+
+      # Mirrors the docker job in the Actions workflow: the checks must also
+      # pass inside the image, not just against the source tree.
+      - |
+        . "$CI_ENV_FILE"
+        docker run --rm "$IMAGE_URI" python manage.py check
+
+  post_build:
+    commands:
+      # Publish only from a green build on a mainline branch. The webhook
+      # filters already limit PUSH events to develop and main, so a pull
+      # request build verifies the image without publishing it.
+      - |
+        . "$CI_ENV_FILE"
+        if [ "${CODEBUILD_BUILD_SUCCEEDING:-0}" != "1" ]; then
+          echo "Build failed - not pushing an image."
+          exit 0
+        fi
+        if [ "${CODEBUILD_WEBHOOK_EVENT:-PUSH}" != "PUSH" ]; then
+          echo "Event ${CODEBUILD_WEBHOOK_EVENT}: image verified, not pushed."
+          exit 0
+        fi
+        echo "Pushing ${IMAGE_URI}"
+        docker push "$IMAGE_URI"
+        # ECR tags are immutable, so there is no moving "latest" to chase:
+        # the deploy step pulls this exact tag.
+        echo "Deployable image: ${IMAGE_URI}"
+
+      # --- Deploy (Phase 6) ---------------------------------------------------
+      # Gating is the whole point here, so it is explicit and it fails closed:
+      #   * a red build never reaches the send-command
+      #   * a pull request build never deploys, whatever branch it came from
+      #   * only a push to develop deploys
+      # A manual build is allowed to deploy, but only when it built develop.
+      - |
+        . "$CI_ENV_FILE"
+
+        if [ "${CODEBUILD_BUILD_SUCCEEDING:-0}" != "1" ]; then
+          echo "DEPLOY SKIPPED: build failed."
+          exit 0
+        fi
+
+        EVENT="${CODEBUILD_WEBHOOK_EVENT:-}"
+        if [ -n "$EVENT" ]; then
+          if [ "$EVENT" != "PUSH" ]; then
+            echo "DEPLOY SKIPPED: event ${EVENT} is not a push (pull request CI never deploys)."
+            exit 0
+          fi
+          if [ "${CODEBUILD_WEBHOOK_HEAD_REF:-}" != "refs/heads/${DEPLOY_BRANCH}" ]; then
+            echo "DEPLOY SKIPPED: push to ${CODEBUILD_WEBHOOK_HEAD_REF:-unknown}, not ${DEPLOY_BRANCH}."
+            exit 0
+          fi
+        else
+          if [ "${CODEBUILD_SOURCE_VERSION:-}" != "${DEPLOY_BRANCH}" ]; then
+            echo "DEPLOY SKIPPED: manual build of ${CODEBUILD_SOURCE_VERSION:-unknown}, not ${DEPLOY_BRANCH}."
+            exit 0
+          fi
+        fi
+
+        echo "Deploying ${COMMIT} to ${DEPLOY_INSTANCE_ID} via ${DEPLOY_DOCUMENT_NAME}"
+        CMD_ID=$(aws ssm send-command       --region "$AWS_DEFAULT_REGION"       --document-name "$DEPLOY_DOCUMENT_NAME"       --instance-ids "$DEPLOY_INSTANCE_ID"       --comment "CodeBuild ${CODEBUILD_BUILD_NUMBER:-manual} ${COMMIT}"       --parameters "CommitSha=${COMMIT}"       --query 'Command.CommandId' --output text)
+        echo "SSM command: ${CMD_ID}"
+
+        # Poll to completion. Without this the build would go green before the
+        # deploy had actually finished, which is worse than no deploy at all.
+        STATUS=Pending
+        for i in $(seq 1 120); do
+          STATUS=$(aws ssm get-command-invocation         --region "$AWS_DEFAULT_REGION"         --command-id "$CMD_ID" --instance-id "$DEPLOY_INSTANCE_ID"         --query 'Status' --output text 2>/dev/null || echo Pending)
+          case "$STATUS" in
+            Success|Failed|Cancelled|TimedOut) break ;;
+          esac
+          sleep 10
+        done
+
+        echo "----- deploy output -----"
+        aws ssm get-command-invocation --region "$AWS_DEFAULT_REGION"       --command-id "$CMD_ID" --instance-id "$DEPLOY_INSTANCE_ID"       --query 'StandardOutputContent' --output text || true
+        ERRS=$(aws ssm get-command-invocation --region "$AWS_DEFAULT_REGION"       --command-id "$CMD_ID" --instance-id "$DEPLOY_INSTANCE_ID"       --query 'StandardErrorContent' --output text || true)
+        [ -n "$ERRS" ] && { echo "----- deploy stderr -----"; echo "$ERRS"; }
+        echo "-------------------------"
+
+        if [ "$STATUS" != "Success" ]; then
+          echo "DEPLOY FAILED (${STATUS})"
+          exit 1
+        fi
+        echo "DEPLOY OK: ${DEPLOY_BRANCH} is now at ${COMMIT}"
+
+# No reports: section. scripts/check.sh runs `manage.py test`, which emits no
+# JUnit XML - add one only if the suite is moved onto a runner that does.
+
+cache:
+  paths:
+    - /root/.cache/pip/**/*
