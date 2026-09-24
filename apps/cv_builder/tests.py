@@ -346,3 +346,100 @@ class CVAPITestCase(TestCase):
         self.assertEqual(response.status_code, 200)
 
         self.assertTrue(CV.objects.filter(cv_id=cv.cv_id).exists())
+
+    def test_cv_can_contain_multiple_education_entries(self):
+        self.authenticate()
+
+        education_1 = Education.objects.create(
+            user=self.user,
+            institution="University One",
+            degree="BSc",
+            field_of_study="Computer Science",
+            start_date="2020-10-01",
+        )
+
+        education_2 = Education.objects.create(
+            user=self.user,
+            institution="University Two",
+            degree="MSc",
+            field_of_study="Computer Science",
+            start_date="2024-10-01",
+        )
+
+        cv = CV.objects.create(
+            user=self.user,
+            template=self.template,
+            title="My CV",
+        )
+
+        cv.educations.add(education_1, education_2)
+
+        response = self.client.get(f"/api/cvs/{cv.cv_id}/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data["educations"]), 2)
+
+
+def test_cv_can_contain_multiple_experience_entries(self):
+    self.authenticate()
+
+    experience_1 = Experience.objects.create(
+        user=self.user,
+        company="Company One",
+        role="Developer",
+        start_date="2024-01-01",
+    )
+
+    experience_2 = Experience.objects.create(
+        user=self.user,
+        company="Company Two",
+        role="Engineer",
+        start_date="2025-01-01",
+    )
+
+    cv = CV.objects.create(
+        user=self.user,
+        template=self.template,
+        title="My CV",
+    )
+
+    cv.experiences.add(experience_1, experience_2)
+
+    response = self.client.get(f"/api/cvs/{cv.cv_id}/")
+
+    self.assertEqual(response.status_code, 200)
+    self.assertEqual(len(response.data["experiences"]), 2)
+
+
+def test_removing_education_from_cv_does_not_delete_education(self):
+    self.authenticate()
+
+    education = Education.objects.create(
+        user=self.user,
+        institution="University",
+        degree="BSc",
+        field_of_study="Computer Science",
+        start_date="2024-01-01",
+    )
+
+    cv = CV.objects.create(
+        user=self.user,
+        template=self.template,
+        title="My CV",
+    )
+
+    cv.educations.add(education)
+
+    response = self.client.put(
+        f"/api/cvs/{cv.cv_id}/",
+        {
+            "educations": [],
+        },
+        format="json",
+    )
+
+    self.assertEqual(response.status_code, 200)
+
+    self.assertEqual(response.data["educations"], [])
+
+    self.assertTrue(Education.objects.filter(education_id=education.education_id).exists())
