@@ -78,6 +78,22 @@ class SkillSerializer(serializers.ModelSerializer):
         fields = ["skill_id", "name", "display_order"]
         read_only_fields = ["skill_id"]
 
+    def validate_name(self, value):
+        user = self.context["request"].user
+
+        queryset = Skill.objects.filter(
+            user=user,
+            name__iexact=value,
+        )
+
+        if self.instance:
+            queryset = queryset.exclude(pk=self.instance.pk)
+
+        if queryset.exists():
+            raise serializers.ValidationError("You already have a skill with this name.")
+
+        return value
+
 
 class CertificationSerializer(serializers.ModelSerializer):
     class Meta:
