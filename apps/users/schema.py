@@ -85,7 +85,7 @@ auth_schema = {
         },
         tags=["Authentication"],
     ),
-    "refresh_jwt": extend_schema(
+    "refresh": extend_schema(
         operation_id="auth_refresh",
         summary="Refresh access token",
         description=(
@@ -98,5 +98,5 @@ auth_schema = {
             401: OpenApiResponse(description="Missing or invalid refresh token"),
         },
         tags=["Authentication"],
-)
+    ),
 }
