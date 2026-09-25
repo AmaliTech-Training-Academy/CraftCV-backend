@@ -151,7 +151,8 @@ class MasterDataAPITestCase(TestCase):
 
         response = self.client.delete(f"/api/cvs/educations/{education_1.education_id}/")
 
-        self.assertEqual(response.status_code, 204)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["message"], "Education deleted successfully.")
 
         self.assertFalse(Education.objects.filter(education_id=education_1.education_id).exists())
 
@@ -312,7 +313,8 @@ class MasterDataAPITestCase(TestCase):
 
         response = self.client.delete(f"/api/cvs/experiences/{experience_1.experience_id}/")
 
-        self.assertEqual(response.status_code, 204)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["message"], "Experience deleted successfully.")
 
         self.assertFalse(
             Experience.objects.filter(experience_id=experience_1.experience_id).exists()
@@ -427,7 +429,8 @@ class MasterDataAPITestCase(TestCase):
 
         response = self.client.delete(f"/api/cvs/skills/{skill.skill_id}/")
 
-        self.assertEqual(response.status_code, 204)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["message"], "Skill deleted successfully.")
 
         self.assertFalse(Skill.objects.filter(skill_id=skill.skill_id).exists())
 

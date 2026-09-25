@@ -23,15 +23,11 @@ class CVAPITestCase(TestCase):
 
         self.user = User.objects.create_user(
             email="user@example.com",
-            first_name="User1",
-            last_name="U1",
             password="StrongPassword123!",
         )
 
         self.another_user = User.objects.create_user(
             email="another@example.com",
-            first_name="User2",
-            last_name="U2",
             password="StrongPassword123!",
         )
 
@@ -152,7 +148,9 @@ class CVAPITestCase(TestCase):
                 list_response = self.client.get(f"/api/cvs/{endpoint}/")
 
                 self.assertEqual(list_response.status_code, 200)
-                self.assertIn(create_response.data, list_response.data)
+                created_data = dict(create_response.data)
+                created_data.pop("message")
+                self.assertIn(created_data, list_response.data)
 
     def test_authenticated_user_can_create_cv(self):
         self.authenticate()
@@ -173,6 +171,7 @@ class CVAPITestCase(TestCase):
         )
 
         self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["message"], "CV created successfully.")
         self.assertEqual(
             response.data["title"],
             "Software Engineer CV",
@@ -192,6 +191,40 @@ class CVAPITestCase(TestCase):
             len(response.data["skills"]),
             1,
         )
+
+    def test_empty_cv_list_returns_message(self):
+        self.authenticate()
+
+        response = self.client.get("/api/cvs/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["message"], "You have not created any CVs yet.")
+        self.assertEqual(response.data["data"], [])
+
+    def test_invalid_cv_data_returns_validation_response(self):
+        self.authenticate()
+
+        response = self.client.post(
+            "/api/cvs/",
+            {"professional_summary": "Missing title and template"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["message"], "Invalid CV data.")
+        self.assertIn("title", response.data)
+        self.assertIn("template", response.data)
+
+    def test_missing_cv_returns_custom_error_response(self):
+        self.authenticate()
+
+        response = self.client.get(
+            "/api/cvs/00000000-0000-0000-0000-000000000000/",
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.data["error"], "No CV matches the given query.")
+        self.assertEqual(response.data["message"], "CV resource not found.")
 
     def test_authenticated_user_can_retrieve_own_cv(self):
         self.authenticate()
@@ -275,6 +308,7 @@ class CVAPITestCase(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["message"], "CV updated successfully.")
 
         self.assertEqual(
             response.data["professional_summary"],
@@ -339,7 +373,8 @@ class CVAPITestCase(TestCase):
 
         response = self.client.delete(f"/api/cvs/educations/{self.education.education_id}/")
 
-        self.assertEqual(response.status_code, 204)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, {"message": "Education deleted successfully."})
 
         response = self.client.get(f"/api/cvs/{cv.cv_id}/")
 
