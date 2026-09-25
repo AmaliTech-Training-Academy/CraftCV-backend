@@ -4,6 +4,8 @@ services:
   db:
     image: postgres:17-alpine
     restart: unless-stopped
+    ports:
+      - 5142:5142
     env_file:
       - .env
 
@@ -28,9 +30,10 @@ services:
       - .env
 
     command: >
-      gunicorn craftcv.wsgi:application
-      --bind 0.0.0.0:8000
-      --workers 2
+        sh -c "python manage.py collectstatic --noinput &&
+        gunicorn craftcv.wsgi:application
+        --bind 0.0.0.0:8000
+        --workers 2"
 
     environment:
       SECRET_KEY: ${SECRET_KEY}
