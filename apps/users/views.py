@@ -6,6 +6,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.users.models import VerificationCode
@@ -33,7 +34,14 @@ class AuthViewSet(viewsets.GenericViewSet):
     permission_classes = [AllowAny]
 
     def get_permissions(self):
-        if self.action in ("register", "login", "forgot_password", "verify_code", "reset_password"):
+        if self.action in (
+            "register",
+            "login",
+            "forgot_password",
+            "verify_code",
+            "reset_password",
+            "refresh",
+        ):
             return [AllowAny()]
         return [IsAuthenticated()]
 
@@ -196,5 +204,30 @@ class AuthViewSet(viewsets.GenericViewSet):
 
         return Response(
             {"message": "Password reset successfully."},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="refresh",
+        permission_classes=[AllowAny],
+    )
+    def refresh(self, request):
+        token = request.COOKIES.get("refresh_token")
+
+        if not token:
+            return Response({"error": "No refresh token"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        try:
+            refresh = RefreshToken(token)
+        except TokenError:
+            return Response(
+                {"error": "Invalid or expired refresh token."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        return Response(
+            {"access": str(refresh.access_token)},
             status=status.HTTP_200_OK,
         )
