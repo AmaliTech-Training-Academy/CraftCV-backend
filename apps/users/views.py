@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model
 from drf_spectacular.utils import extend_schema_view
 from rest_framework import status, viewsets
@@ -5,6 +6,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.users.models import VerificationCode
@@ -23,13 +25,23 @@ from .serializers import (
 
 User = get_user_model()
 
+REMEMBER_ME_SECONDS = 30 * 24 * 60 * 60
+SESSION_SECONDS = 12 * 60 * 60
+
 
 @extend_schema_view(**auth_schema)
 class AuthViewSet(viewsets.GenericViewSet):
     permission_classes = [AllowAny]
 
     def get_permissions(self):
-        if self.action in ("register", "login", "forgot_password", "verify_code", "reset_password"):
+        if self.action in (
+            "register",
+            "login",
+            "forgot_password",
+            "verify_code",
+            "reset_password",
+            "refresh",
+        ):
             return [AllowAny()]
         return [IsAuthenticated()]
 
@@ -68,6 +80,7 @@ class AuthViewSet(viewsets.GenericViewSet):
 
         email = serializer.validated_data["email"]
         password = serializer.validated_data["password"]
+        remember_me = serializer.validated_data["remember_me"]
 
         user = authenticate(request, username=email, password=password)
         if user is None:
@@ -76,7 +89,25 @@ class AuthViewSet(viewsets.GenericViewSet):
                 status=status.HTTP_401_UNAUTHORIZED,
             )
 
-        return Response(self._token_payload(user), status=status.HTTP_200_OK)
+        refresh = RefreshToken.for_user(user)
+        access = refresh.access_token
+
+        response = Response(
+            {"user": UserSerializer(user).data, "access": str(access)}, status=status.HTTP_200_OK
+        )
+
+        max_age = REMEMBER_ME_SECONDS if remember_me else SESSION_SECONDS
+
+        response.set_cookie(
+            key="refresh_token",
+            value=str(refresh),
+            max_age=max_age,
+            httponly=True,
+            secure=not settings.DEBUG,
+            path="/api/auth/",
+        )
+
+        return response
 
     @action(
         detail=False,
@@ -173,5 +204,30 @@ class AuthViewSet(viewsets.GenericViewSet):
 
         return Response(
             {"message": "Password reset successfully."},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="refresh",
+        permission_classes=[AllowAny],
+    )
+    def refresh(self, request):
+        token = request.COOKIES.get("refresh_token")
+
+        if not token:
+            return Response({"error": "No refresh token"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        try:
+            refresh = RefreshToken(token)
+        except TokenError:
+            return Response(
+                {"error": "Invalid or expired refresh token."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        return Response(
+            {"access": str(refresh.access_token)},
             status=status.HTTP_200_OK,
         )

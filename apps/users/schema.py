@@ -85,4 +85,18 @@ auth_schema = {
         },
         tags=["Authentication"],
     ),
+    "refresh": extend_schema(
+        operation_id="auth_refresh",
+        summary="Refresh access token",
+        description=(
+            "Read the refresh_token cookie and return a new short-lived access token. "
+            "The browser sends the cookie automatically; no request body is required."
+        ),
+        request=None,
+        responses={
+            200: OpenApiResponse(description="New access token issued"),
+            401: OpenApiResponse(description="Missing or invalid refresh token"),
+        },
+        tags=["Authentication"],
+    ),
 }
