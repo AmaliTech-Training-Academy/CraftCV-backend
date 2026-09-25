@@ -1,4 +1,4 @@
-from rest_framework import generics
+from rest_framework import generics, status
 from rest_framework.exceptions import NotFound
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -29,6 +29,39 @@ from .serializers import (
 )
 
 
+class DestroyResponseMixin:
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        resource_name = instance._meta.verbose_name.title()
+        self.perform_destroy(instance)
+
+        return Response(
+            {"message": f"{resource_name} deleted successfully."},
+            status=200,
+        )
+
+
+class SuccessResponseMixin:
+    def _resource_name(self):
+        resource_name = self.get_serializer_class().Meta.model._meta.verbose_name.title()
+        return "CV" if resource_name == "Cv" else resource_name
+
+    def create(self, request, *args, **kwargs):
+        response = super().create(request, *args, **kwargs)
+        response.data["message"] = f"{self._resource_name()} created successfully."
+        return response
+
+    def retrieve(self, request, *args, **kwargs):
+        response = super().retrieve(request, *args, **kwargs)
+        response.data["message"] = f"{self._resource_name()} retrieved successfully."
+        return response
+
+    def update(self, request, *args, **kwargs):
+        response = super().update(request, *args, **kwargs)
+        response.data["message"] = f"{self._resource_name()} updated successfully."
+        return response
+
+
 class CVListCreateView(generics.ListCreateAPIView):
     serializer_class = CVSerializer
     permission_classes = [IsAuthenticated]
@@ -55,8 +88,26 @@ class CVListCreateView(generics.ListCreateAPIView):
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        if not response.data:
+            return Response(
+                {
+                    "message": "You have not created any CVs yet.",
+                    "data": [],
+                },
+                status=response.status_code,
+            )
 
-class CVDetailView(generics.RetrieveUpdateAPIView):
+        return response
+
+    def create(self, request, *args, **kwargs):
+        response = super().create(request, *args, **kwargs)
+        response.data["message"] = "CV created successfully."
+        return response
+
+
+class CVDetailView(SuccessResponseMixin, generics.RetrieveUpdateDestroyAPIView):
     serializer_class = CVSerializer
     permission_classes = [IsAuthenticated]
     lookup_field = "cv_id"
@@ -82,12 +133,13 @@ class CVDetailView(generics.RetrieveUpdateAPIView):
         )
 
     def put(self, request, *args, **kwargs):
-        return self.update(
+        response = self.update(
             request,
             *args,
             partial=True,
             **kwargs,
         )
+        return response
 
 
 class PersonalDetailView(generics.RetrieveUpdateAPIView):
@@ -111,8 +163,8 @@ class PersonalDetailView(generics.RetrieveUpdateAPIView):
             serializer.save(user=request.user)
 
             return Response(
-                serializer.data,
-                status=201,
+                {**serializer.data, "message": "Personal details created successfully."},
+                status=status.HTTP_201_CREATED,
             )
 
         serializer = self.get_serializer(
@@ -125,12 +177,12 @@ class PersonalDetailView(generics.RetrieveUpdateAPIView):
         serializer.save()
 
         return Response(
-            serializer.data,
-            status=200,
+            {**serializer.data, "message": "Personal details updated successfully."},
+            status=status.HTTP_200_OK,
         )
 
 
-class EducationListCreateView(generics.ListCreateAPIView):
+class EducationListCreateView(SuccessResponseMixin, generics.ListCreateAPIView):
     serializer_class = EducationSerializer
     permission_classes = [IsAuthenticated]
 
@@ -140,8 +192,25 @@ class EducationListCreateView(generics.ListCreateAPIView):
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        if not response.data:
+            return Response(
+                {
+                    "message": "You have not added any education yet.",
+                    "data": [],
+                },
+                status=response.status_code,
+            )
 
-class EducationDetailView(generics.RetrieveUpdateDestroyAPIView):
+        return response
+
+
+class EducationDetailView(
+    SuccessResponseMixin,
+    DestroyResponseMixin,
+    generics.RetrieveUpdateDestroyAPIView,
+):
     serializer_class = EducationSerializer
     permission_classes = [IsAuthenticated]
     lookup_field = "education_id"
@@ -150,7 +219,7 @@ class EducationDetailView(generics.RetrieveUpdateDestroyAPIView):
         return Education.objects.filter(user=self.request.user)
 
 
-class ExperienceListCreateView(generics.ListCreateAPIView):
+class ExperienceListCreateView(SuccessResponseMixin, generics.ListCreateAPIView):
     serializer_class = ExperienceSerializer
     permission_classes = [IsAuthenticated]
 
@@ -160,8 +229,25 @@ class ExperienceListCreateView(generics.ListCreateAPIView):
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        if not response.data:
+            return Response(
+                {
+                    "message": "You have not added any experience yet.",
+                    "data": [],
+                },
+                status=response.status_code,
+            )
 
-class ExperienceDetailView(generics.RetrieveUpdateDestroyAPIView):
+        return response
+
+
+class ExperienceDetailView(
+    SuccessResponseMixin,
+    DestroyResponseMixin,
+    generics.RetrieveUpdateDestroyAPIView,
+):
     serializer_class = ExperienceSerializer
     permission_classes = [IsAuthenticated]
     lookup_field = "experience_id"
@@ -170,7 +256,7 @@ class ExperienceDetailView(generics.RetrieveUpdateDestroyAPIView):
         return Experience.objects.filter(user=self.request.user)
 
 
-class SkillListCreateView(generics.ListCreateAPIView):
+class SkillListCreateView(SuccessResponseMixin, generics.ListCreateAPIView):
     serializer_class = SkillSerializer
     permission_classes = [IsAuthenticated]
 
@@ -180,8 +266,25 @@ class SkillListCreateView(generics.ListCreateAPIView):
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        if not response.data:
+            return Response(
+                {
+                    "message": "You have not added any skill yet.",
+                    "data": [],
+                },
+                status=response.status_code,
+            )
 
-class SkillDetailView(generics.RetrieveUpdateDestroyAPIView):
+        return response
+
+
+class SkillDetailView(
+    SuccessResponseMixin,
+    DestroyResponseMixin,
+    generics.RetrieveUpdateDestroyAPIView,
+):
     serializer_class = SkillSerializer
     permission_classes = [IsAuthenticated]
     lookup_field = "skill_id"
@@ -190,7 +293,7 @@ class SkillDetailView(generics.RetrieveUpdateDestroyAPIView):
         return Skill.objects.filter(user=self.request.user)
 
 
-class CertificationListCreateView(generics.ListCreateAPIView):
+class CertificationListCreateView(SuccessResponseMixin, generics.ListCreateAPIView):
     serializer_class = CertificationSerializer
     permission_classes = [IsAuthenticated]
 
@@ -200,8 +303,25 @@ class CertificationListCreateView(generics.ListCreateAPIView):
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        if not response.data:
+            return Response(
+                {
+                    "message": "You have not added any certificate yet.",
+                    "data": [],
+                },
+                status=response.status_code,
+            )
 
-class CertificationDetailView(generics.RetrieveUpdateDestroyAPIView):
+        return response
+
+
+class CertificationDetailView(
+    SuccessResponseMixin,
+    DestroyResponseMixin,
+    generics.RetrieveUpdateDestroyAPIView,
+):
     serializer_class = CertificationSerializer
     permission_classes = [IsAuthenticated]
     lookup_field = "certification_id"
@@ -210,7 +330,7 @@ class CertificationDetailView(generics.RetrieveUpdateDestroyAPIView):
         return Certification.objects.filter(user=self.request.user)
 
 
-class LanguageListCreateView(generics.ListCreateAPIView):
+class LanguageListCreateView(SuccessResponseMixin, generics.ListCreateAPIView):
     serializer_class = LanguageSerializer
     permission_classes = [IsAuthenticated]
 
@@ -220,8 +340,25 @@ class LanguageListCreateView(generics.ListCreateAPIView):
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        if not response.data:
+            return Response(
+                {
+                    "message": "You have not added any language yet.",
+                    "data": [],
+                },
+                status=response.status_code,
+            )
 
-class LanguageDetailView(generics.RetrieveUpdateDestroyAPIView):
+        return response
+
+
+class LanguageDetailView(
+    SuccessResponseMixin,
+    DestroyResponseMixin,
+    generics.RetrieveUpdateDestroyAPIView,
+):
     serializer_class = LanguageSerializer
     permission_classes = [IsAuthenticated]
     lookup_field = "language_id"
@@ -230,7 +367,7 @@ class LanguageDetailView(generics.RetrieveUpdateDestroyAPIView):
         return Language.objects.filter(user=self.request.user)
 
 
-class AwardListCreateView(generics.ListCreateAPIView):
+class AwardListCreateView(SuccessResponseMixin, generics.ListCreateAPIView):
     serializer_class = AwardSerializer
     permission_classes = [IsAuthenticated]
 
@@ -240,8 +377,25 @@ class AwardListCreateView(generics.ListCreateAPIView):
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        if not response.data:
+            return Response(
+                {
+                    "message": "You have not added any award yet.",
+                    "data": [],
+                },
+                status=response.status_code,
+            )
 
-class AwardDetailView(generics.RetrieveUpdateDestroyAPIView):
+        return response
+
+
+class AwardDetailView(
+    SuccessResponseMixin,
+    DestroyResponseMixin,
+    generics.RetrieveUpdateDestroyAPIView,
+):
     serializer_class = AwardSerializer
     permission_classes = [IsAuthenticated]
     lookup_field = "award_id"
@@ -250,7 +404,7 @@ class AwardDetailView(generics.RetrieveUpdateDestroyAPIView):
         return Award.objects.filter(user=self.request.user)
 
 
-class AdditionalInformationListCreateView(generics.ListCreateAPIView):
+class AdditionalInformationListCreateView(SuccessResponseMixin, generics.ListCreateAPIView):
     serializer_class = AdditionalInformationSerializer
     permission_classes = [IsAuthenticated]
 
@@ -260,8 +414,25 @@ class AdditionalInformationListCreateView(generics.ListCreateAPIView):
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        if not response.data:
+            return Response(
+                {
+                    "message": "You have not added any additional information yet.",
+                    "data": [],
+                },
+                status=response.status_code,
+            )
 
-class AdditionalInformationDetailView(generics.RetrieveUpdateDestroyAPIView):
+        return response
+
+
+class AdditionalInformationDetailView(
+    SuccessResponseMixin,
+    DestroyResponseMixin,
+    generics.RetrieveUpdateDestroyAPIView,
+):
     serializer_class = AdditionalInformationSerializer
     permission_classes = [IsAuthenticated]
     lookup_field = "additional_info_id"
@@ -270,15 +441,28 @@ class AdditionalInformationDetailView(generics.RetrieveUpdateDestroyAPIView):
         return AdditionalInformation.objects.filter(user=self.request.user)
 
 
-class TemplateListView(generics.ListAPIView):
+class TemplateListView(SuccessResponseMixin, generics.ListAPIView):
     serializer_class = TemplateSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         return Template.objects.all()
 
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        if not response.data:
+            return Response(
+                {
+                    "message": "No templates are available yet.",
+                    "data": [],
+                },
+                status=response.status_code,
+            )
 
-class TemplateDetailView(generics.RetrieveAPIView):
+        return response
+
+
+class TemplateDetailView(SuccessResponseMixin, generics.RetrieveAPIView):
     serializer_class = TemplateSerializer
     permission_classes = [IsAuthenticated]
     lookup_field = "template_id"

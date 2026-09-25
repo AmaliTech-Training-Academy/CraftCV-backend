@@ -140,47 +140,81 @@ class CVSerializer(serializers.ModelSerializer):
         many=True,
         queryset=Education.objects.all(),
         required=False,
+        error_messages={
+            "does_not_exist": "Selected education records could not be found.",
+            "incorrect_type": "Please provide valid education IDs.",
+        },
     )
 
     experiences = serializers.PrimaryKeyRelatedField(
         many=True,
         queryset=Experience.objects.all(),
         required=False,
+        error_messages={
+            "does_not_exist": "Selected experience records could not be found.",
+            "incorrect_type": "Please provide valid experience IDs.",
+        },
     )
 
     skills = serializers.PrimaryKeyRelatedField(
         many=True,
         queryset=Skill.objects.all(),
         required=False,
+        error_messages={
+            "does_not_exist": "Selected skills could not be found.",
+            "incorrect_type": "Please provide valid skill IDs.",
+        },
     )
 
     certifications = serializers.PrimaryKeyRelatedField(
         many=True,
         queryset=Certification.objects.all(),
         required=False,
+        error_messages={
+            "does_not_exist": "Selected certification records could not be found.",
+            "incorrect_type": "Please provide valid certification IDs.",
+        },
     )
 
     languages = serializers.PrimaryKeyRelatedField(
         many=True,
         queryset=Language.objects.all(),
         required=False,
+        error_messages={
+            "does_not_exist": "Selected languages could not be found.",
+            "incorrect_type": "Please provide valid language IDs.",
+        },
     )
 
     awards = serializers.PrimaryKeyRelatedField(
         many=True,
         queryset=Award.objects.all(),
         required=False,
+        error_messages={
+            "does_not_exist": "Selected awards could not be found.",
+            "incorrect_type": "Please provide valid award IDs.",
+        },
     )
 
     additional_information = serializers.PrimaryKeyRelatedField(
         many=True,
         queryset=AdditionalInformation.objects.all(),
         required=False,
+        error_messages={
+            "does_not_exist": "Selected additional information records could not be found.",
+            "incorrect_type": "Please provide valid additional information IDs.",
+        },
     )
 
     template = serializers.PrimaryKeyRelatedField(
         queryset=Template.objects.all(),
         required=True,
+        error_messages={
+            "does_not_exist": "The selected template could not be found.",
+            "incorrect_type": "Please provide a valid template ID.",
+            "required": "A template is required.",
+            "null": "A template cannot be empty.",
+        },
     )
 
     class Meta:
