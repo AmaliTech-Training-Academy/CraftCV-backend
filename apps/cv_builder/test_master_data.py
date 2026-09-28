@@ -7,9 +7,17 @@ from apps.cv_builder.models import (
     Education,
     Experience,
     Skill,
+    Template,
 )
 
 User = get_user_model()
+
+
+class TemplateSlugTestCase(TestCase):
+    def test_template_slug_is_generated_from_name(self):
+        template = Template.objects.create(name="Modern CV Template!")
+
+        self.assertEqual(template.slug, "modern-cv-template")
 
 
 class MasterDataAPITestCase(TestCase):
