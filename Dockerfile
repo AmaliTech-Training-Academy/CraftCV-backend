@@ -17,6 +17,8 @@ RUN pip install -r requirements.txt
 
 COPY . .
 
+RUN python manage.py collectstatic --noinput
+
 # Run as a normal user; uid 1000 lines up with the usual host user on Linux.
 RUN useradd --create-home --uid 1000 app && chown -R app:app /app
 USER app
