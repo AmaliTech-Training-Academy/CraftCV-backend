@@ -7,7 +7,6 @@ packaging==26.3
 pipenv==2026.8.0
 platformdirs==4.11.7
 python-discovery==1.6.0
-ruff==0.16.8
 setuptools==84.0.0
 sqlparse==0.6.0
 tzdata==2026.4
