@@ -15,7 +15,14 @@ auth_schema = {
     "register": extend_schema(
         operation_id="auth_register",
         summary="Register a new user",
-        description="Create a new account and return JWT access & refresh tokens.",
+        description=(
+            "Create a new account and return JWT access & refresh tokens."
+            "Create a new account. On success, returns JSON with user info "
+            "and an access token, and sets an HttpOnly `refresh_token` cookie "
+            "scoped to `Path=/api/auth/`.\n\n"
+            "The frontend should call `POST /api/auth/refresh/` (with credentials) "
+            "to obtain a new access token when the current one expires."
+        ),
         request=UserCreateSerializer,
         responses={
             201: OpenApiResponse(
@@ -28,7 +35,12 @@ auth_schema = {
     "login": extend_schema(
         operation_id="auth_login",
         summary="Log in",
-        description="Authenticate with email and password and return JWT tokens.",
+        description=(
+            "Authenticate with email and password and return JWT tokens."
+            "Authenticate with email and password. "
+            "On success, returns JSON with user info and access token, "
+            "and sets an HttpOnly `refresh_token` cookie at `Path=/api/auth/`."
+        ),
         request=LoginSerializer,
         responses={
             200: TokenPayloadSerializer,

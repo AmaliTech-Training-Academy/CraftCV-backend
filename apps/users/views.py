@@ -103,7 +103,7 @@ class AuthViewSet(viewsets.GenericViewSet):
             value=str(refresh),
             max_age=max_age,
             httponly=True,
-            secure=not settings.DEBUG,
+            secure=False,
             path="/api/auth/",
         )
 
