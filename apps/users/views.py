@@ -1,4 +1,3 @@
-from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model
 from drf_spectacular.utils import extend_schema_view
 from rest_framework import status, viewsets
@@ -58,29 +57,41 @@ class AuthViewSet(viewsets.GenericViewSet):
             return ResetPasswordSerializer
         return UserSerializer
 
-    def _token_payload(self, user):
-        refresh = RefreshToken.for_user(user)
-        return {
-            "user": UserSerializer(user).data,
-            "access": str(refresh.access_token),
-            "refresh": str(refresh),
-        }
-
     @action(detail=False, methods=["post"], url_path="register")
     def register(self, request):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
-        return Response(self._token_payload(user), status=status.HTTP_201_CREATED)
+
+        refresh = RefreshToken.for_user(user)
+
+        response = Response(
+            {
+                "user": UserSerializer(user).data,
+                "access_token": str(refresh.access_token),
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+        response.set_cookie(
+            key="refreshToken",
+            value=str(refresh),
+            max_age=SESSION_SECONDS,
+            httponly=True,
+            secure=False,
+            path="/api/auth/",
+        )
+
+        return response
 
     @action(detail=False, methods=["post"], url_path="login")
     def login(self, request):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        email = serializer.validated_data["email"]
-        password = serializer.validated_data["password"]
-        remember_me = serializer.validated_data["remember_me"]
+        email = serializer.validated_data.get("email")
+        password = serializer.validated_data.get("password")
+        remember_me = serializer.validated_data.get("remember_me")
 
         user = authenticate(request, username=email, password=password)
         if user is None:
@@ -93,13 +104,14 @@ class AuthViewSet(viewsets.GenericViewSet):
         access = refresh.access_token
 
         response = Response(
-            {"user": UserSerializer(user).data, "access": str(access)}, status=status.HTTP_200_OK
+            {"user": UserSerializer(user).data, "access_token": str(access)},
+            status=status.HTTP_200_OK,
         )
 
         max_age = REMEMBER_ME_SECONDS if remember_me else SESSION_SECONDS
 
         response.set_cookie(
-            key="refresh_token",
+            key="refreshToken",
             value=str(refresh),
             max_age=max_age,
             httponly=True,
