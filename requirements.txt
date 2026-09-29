@@ -1,14 +1,20 @@
-asgiref==3.12.1
-certifi==2026.7.22
-distlib==0.4.3
-Django==6.1.1
-filelock==3.32.5
-packaging==26.3
-pipenv==2026.8.0
-platformdirs==4.11.7
-python-discovery==1.6.0
-setuptools==84.0.0
-sqlparse==0.6.0
-tzdata==2026.4
-virtualenv==21.7.8
+# Core Framework
+django==6.1.1
+djangorestframework==3.18.1
+
+# Database
+psycopg[binary]==3.3.5
+
+# API Documentation
+drf-spectacular==0.28.0
+
+# Production WSGI server, used by the Docker image
+gunicorn==26.2.0
+django_cors_headers==4.9.0
 whitenoise==6.12.0
+
+# Development Tools
+django-debug-toolbar==8.0.0
+python-dotenv==1.2.3
+djangorestframework_simplejwt==5.5.1
+djangorestframework_camel_case==1.4.2
