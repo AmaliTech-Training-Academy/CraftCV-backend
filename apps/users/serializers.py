@@ -59,8 +59,7 @@ class LoginSerializer(serializers.Serializer):
 
 class TokenPayloadSerializer(serializers.Serializer):
     user = UserSerializer()
-    access = serializers.CharField()
-    refresh = serializers.CharField()
+    access_token = serializers.CharField()
 
 
 class ForgotPasswordSerializer(serializers.Serializer):
