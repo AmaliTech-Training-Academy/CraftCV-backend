@@ -17,7 +17,7 @@ from .models import (
 class TemplateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Template
-        fields = ["template_id", "name", "description", "design"]
+        fields = ["template_id", "name", "description", "slug"]
         read_only_fields = ["template_id"]
 
 
