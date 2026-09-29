@@ -572,3 +572,90 @@ class MasterDataAPITestCase(TestCase):
         response = self.client.get("/api/cvs/skills/")
 
         self.assertEqual(response.status_code, 401)
+
+    def test_current_education_and_experience_require_empty_end_date(self):
+        self.authenticate()
+
+        sections = [
+            (
+                "educations",
+                {
+                    "institution": "University of Ghana",
+                    "degree": "BSc",
+                    "field_of_study": "Computer Science",
+                    "start_date": "2024-10-01",
+                },
+            ),
+            (
+                "experiences",
+                {
+                    "company": "CraftCV",
+                    "role": "Software Engineer",
+                    "start_date": "2025-01-01",
+                },
+            ),
+        ]
+
+        for endpoint, payload in sections:
+            with self.subTest(endpoint=endpoint):
+                invalid_response = self.client.post(
+                    f"/api/cvs/{endpoint}/",
+                    {**payload, "is_current": True, "end_date": "2025-06-01"},
+                    format="json",
+                )
+                self.assertEqual(invalid_response.status_code, 400)
+                self.assertIn("end_date", invalid_response.data)
+
+                valid_response = self.client.post(
+                    f"/api/cvs/{endpoint}/",
+                    {**payload, "is_current": True, "end_date": None},
+                    format="json",
+                )
+                self.assertEqual(valid_response.status_code, 201)
+                self.assertTrue(valid_response.data["is_current"])
+                self.assertIsNone(valid_response.data["end_date"])
+
+    def test_education_and_experience_can_be_marked_current_with_patch(self):
+        self.authenticate()
+
+        sections = [
+            (
+                "educations",
+                {
+                    "institution": "University of Ghana",
+                    "degree": "BSc",
+                    "field_of_study": "Computer Science",
+                    "start_date": "2024-10-01",
+                },
+                "education_id",
+            ),
+            (
+                "experiences",
+                {
+                    "company": "CraftCV",
+                    "role": "Software Engineer",
+                    "start_date": "2025-01-01",
+                },
+                "experience_id",
+            ),
+        ]
+
+        for endpoint, payload, id_field in sections:
+            with self.subTest(endpoint=endpoint):
+                create_response = self.client.post(
+                    f"/api/cvs/{endpoint}/",
+                    payload,
+                    format="json",
+                )
+                self.assertEqual(create_response.status_code, 201)
+
+                section_id = create_response.data[id_field]
+                patch_response = self.client.patch(
+                    f"/api/cvs/{endpoint}/{section_id}/",
+                    {"is_current": True},
+                    format="json",
+                )
+
+                self.assertEqual(patch_response.status_code, 200)
+                self.assertTrue(patch_response.data["is_current"])
+                self.assertIsNone(patch_response.data["end_date"])

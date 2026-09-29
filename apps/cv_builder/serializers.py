@@ -49,11 +49,22 @@ class EducationSerializer(serializers.ModelSerializer):
             "field_of_study",
             "start_date",
             "end_date",
+            "is_current",
             "description",
             "display_order",
         ]
 
         read_only_fields = ["education_id"]
+
+    def validate(self, attrs):
+        is_current = attrs.get("is_current", getattr(self.instance, "is_current", False))
+        end_date = attrs.get("end_date", getattr(self.instance, "end_date", None))
+
+        if is_current and end_date is not None:
+            raise serializers.ValidationError(
+                {"end_date": "End date must be empty if education is current"}
+            )
+        return attrs
 
 
 class ExperienceSerializer(serializers.ModelSerializer):
@@ -66,10 +77,21 @@ class ExperienceSerializer(serializers.ModelSerializer):
             "location",
             "start_date",
             "end_date",
+            "is_current",
             "description",
             "display_order",
         ]
         read_only_fields = ["experience_id"]
+
+    def validate(self, attrs):
+        is_current = attrs.get("is_current", getattr(self.instance, "is_current", False))
+        end_date = attrs.get("end_date", getattr(self.instance, "end_date", None))
+
+        if is_current and end_date is not None:
+            raise serializers.ValidationError(
+                {"end_date": "End date must be empty if experience is current"}
+            )
+        return attrs
 
 
 class SkillSerializer(serializers.ModelSerializer):
