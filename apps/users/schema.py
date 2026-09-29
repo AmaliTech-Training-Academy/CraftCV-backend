@@ -18,7 +18,7 @@ auth_schema = {
         description=(
             "Create a new account and return JWT access & refresh tokens."
             "Create a new account. On success, returns JSON with user info "
-            "and an access token, and sets an HttpOnly `refresh_token` cookie "
+            "and an access token, and sets an HttpOnly `refreshToken` cookie "
             "scoped to `Path=/api/auth/`.\n\n"
             "The frontend should call `POST /api/auth/refresh/` (with credentials) "
             "to obtain a new access token when the current one expires."
@@ -39,7 +39,7 @@ auth_schema = {
             "Authenticate with email and password and return JWT tokens."
             "Authenticate with email and password. "
             "On success, returns JSON with user info and access token, "
-            "and sets an HttpOnly `refresh_token` cookie at `Path=/api/auth/`."
+            "and sets an HttpOnly `refreshToken` cookie at `Path=/api/auth/`."
         ),
         request=LoginSerializer,
         responses={
@@ -101,7 +101,7 @@ auth_schema = {
         operation_id="auth_refresh",
         summary="Refresh access token",
         description=(
-            "Read the refresh_token cookie and return a new short-lived access token. "
+            "Read the refreshToken cookie and return a new short-lived access token. "
             "The browser sends the cookie automatically; no request body is required."
         ),
         request=None,
