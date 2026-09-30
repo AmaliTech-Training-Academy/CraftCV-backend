@@ -205,6 +205,11 @@ REST_FRAMEWORK = {
     ),
 }
 
+if not DEBUG:
+    REST_FRAMEWORK["DEFAULT_RENDERER_CLASSES"] = [
+        "djangorestframework_camel_case.render.CamelCaseJSONRenderer",
+    ]
+
 SPECTACULAR_SETTINGS = {
     "TITLE": "CraftCV",
     "DESCRIPTION": "CraftCV is a web application that helps individuals build seamless CV",
@@ -228,12 +233,6 @@ SIMPLE_JWT = {
     "REFRESH_TOKEN_LIFETIME": timedelta(days=15),
     "ROTATE_REFRESH_TOKENS": False,
 }
-
-
-if not DEBUG:
-    REST_FRAMEWORK["DEFAULT_RENDERER_CLASSES"] = [
-        "rest_framework.renderers.JSONRenderer",
-    ]
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
