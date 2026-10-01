@@ -66,7 +66,7 @@ class AuthViewSet(viewsets.GenericViewSet):
             max_age=max_age,
             httponly=True,
             secure=False,
-            samesite="None",
+            samesite="Lax",
             path="/",
         )
 
