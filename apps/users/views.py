@@ -36,6 +36,7 @@ class AuthViewSet(viewsets.GenericViewSet):
         if self.action in (
             "register",
             "login",
+            "logout",
             "forgot_password",
             "verify_code",
             "reset_password",
@@ -78,10 +79,10 @@ class AuthViewSet(viewsets.GenericViewSet):
 
         response = Response(
             {
-                **UserSerializer(user).data,
+                "user": UserSerializer(user).data,
                 "access_token": str(refresh.access_token),
             },
-            status=status.HTTP_200_OK,
+            status=status.HTTP_201_CREATED,
         )
 
         self._set_refresh_cookie(response, refresh, SESSION_SECONDS)
@@ -109,7 +110,7 @@ class AuthViewSet(viewsets.GenericViewSet):
 
         response = Response(
             {
-                **UserSerializer(user).data,
+                "user": UserSerializer(user).data,
                 "access_token": str(access),
             },
             status=status.HTTP_200_OK,
@@ -134,7 +135,7 @@ class AuthViewSet(viewsets.GenericViewSet):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
         response = Response({"detail": "Logged out."}, status=status.HTTP_200_OK)
-        response.delete_cookie("refreshToken", path="/")
+        response.delete_cookie("refreshToken", path="/", sameSite="Lax")
         return response
 
     @action(
@@ -242,7 +243,7 @@ class AuthViewSet(viewsets.GenericViewSet):
         permission_classes=[AllowAny],
     )
     def refresh(self, request):
-        token = request.COOKIES.get("refresh_token")
+        token = request.COOKIES.get("refreshToken")
 
         if not token:
             return Response({"error": "No refresh token"}, status=status.HTTP_401_UNAUTHORIZED)
