@@ -9,11 +9,8 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = [
-            "id",
             "email",
-            "created_at",
         ]
-        read_only_fields = ["id", "created_at"]
 
 
 class UserCreateSerializer(serializers.ModelSerializer):
