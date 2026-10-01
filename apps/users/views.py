@@ -57,6 +57,17 @@ class AuthViewSet(viewsets.GenericViewSet):
             return ResetPasswordSerializer
         return UserSerializer
 
+    def _set_refresh_cookie(self, response, refresh_token, max_age):
+        response.set_cookie(
+            key="refreshToken",
+            value=str(refresh_token),
+            max_age=max_age,
+            httponly=True,
+            secure=False,
+            samesite="Lax",
+            path="/",
+        )
+
     @action(detail=False, methods=["post"], url_path="register")
     def register(self, request):
         serializer = self.get_serializer(data=request.data)
@@ -67,20 +78,13 @@ class AuthViewSet(viewsets.GenericViewSet):
 
         response = Response(
             {
-                "user": UserSerializer(user).data,
+                **UserSerializer(user).data,
                 "access_token": str(refresh.access_token),
             },
-            status=status.HTTP_201_CREATED,
+            status=status.HTTP_200_OK,
         )
 
-        response.set_cookie(
-            key="refreshToken",
-            value=str(refresh),
-            max_age=SESSION_SECONDS,
-            httponly=True,
-            secure=False,
-            path="/api/auth/",
-        )
+        self._set_refresh_cookie(response, refresh, SESSION_SECONDS)
 
         return response
 
@@ -104,21 +108,33 @@ class AuthViewSet(viewsets.GenericViewSet):
         access = refresh.access_token
 
         response = Response(
-            {"user": UserSerializer(user).data, "access_token": str(access)},
+            {
+                **UserSerializer(user).data,
+                "access_token": str(access),
+            },
             status=status.HTTP_200_OK,
         )
 
         max_age = REMEMBER_ME_SECONDS if remember_me else SESSION_SECONDS
 
-        response.set_cookie(
-            key="refreshToken",
-            value=str(refresh),
-            max_age=max_age,
-            httponly=True,
-            secure=False,
-            path="/api/auth/",
-        )
+        self._set_refresh_cookie(response, refresh, max_age)
 
+        return response
+
+    @action(detail=False, methods=["post"], url_path="logout", permission_classes=[IsAuthenticated])
+    def logout(self, request):
+        refresh_token = request.COOKIES.get("refreshToken")
+
+        if refresh_token:
+            try:
+                RefreshToken(refresh_token).blacklist()
+            except TokenError:
+                return Response(
+                    {"detail": "Invalid or expired refresh token."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        response = Response({"detail": "Logged out."}, status=status.HTTP_200_OK)
+        response.delete_cookie("refreshToken", path="/")
         return response
 
     @action(
