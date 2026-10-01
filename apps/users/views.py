@@ -82,7 +82,7 @@ class AuthViewSet(viewsets.GenericViewSet):
                 "user": UserSerializer(user).data,
                 "access_token": str(refresh.access_token),
             },
-            status=status.HTTP_200_OK,
+            status=status.HTTP_201_CREATED,
         )
 
         self._set_refresh_cookie(response, refresh, SESSION_SECONDS)
