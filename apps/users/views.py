@@ -36,6 +36,7 @@ class AuthViewSet(viewsets.GenericViewSet):
         if self.action in (
             "register",
             "login",
+            "logout",
             "forgot_password",
             "verify_code",
             "reset_password",
@@ -58,13 +59,14 @@ class AuthViewSet(viewsets.GenericViewSet):
         return UserSerializer
 
     def _set_refresh_cookie(self, response, refresh_token, max_age):
+        response.delete_cookie("refreshToken", path="/")
         response.set_cookie(
             key="refreshToken",
             value=str(refresh_token),
             max_age=max_age,
             httponly=True,
             secure=False,
-            samesite="Lax",
+            samesite="None",
             path="/",
         )
 
@@ -78,7 +80,7 @@ class AuthViewSet(viewsets.GenericViewSet):
 
         response = Response(
             {
-                **UserSerializer(user).data,
+                "user": UserSerializer(user).data,
                 "access_token": str(refresh.access_token),
             },
             status=status.HTTP_200_OK,
@@ -109,7 +111,7 @@ class AuthViewSet(viewsets.GenericViewSet):
 
         response = Response(
             {
-                **UserSerializer(user).data,
+                "user": UserSerializer(user).data,
                 "access_token": str(access),
             },
             status=status.HTTP_200_OK,
@@ -242,7 +244,7 @@ class AuthViewSet(viewsets.GenericViewSet):
         permission_classes=[AllowAny],
     )
     def refresh(self, request):
-        token = request.COOKIES.get("refresh_token")
+        token = request.COOKIES.get("refreshToken")
 
         if not token:
             return Response({"error": "No refresh token"}, status=status.HTTP_401_UNAUTHORIZED)
