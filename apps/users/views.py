@@ -121,6 +121,22 @@ class AuthViewSet(viewsets.GenericViewSet):
 
         return response
 
+    @action(detail=False, methods=["post"], url_path="logout")
+    def logout(self, request):
+        refresh_token = request.COOKIES.get("refreshToken")
+
+        if refresh_token:
+            try:
+                RefreshToken(refresh_token).blacklist()
+            except TokenError:
+                return Response(
+                    {"detail": "Invalid or expired refresh token."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        response = Response({"detail": "Logged out."}, status=status.HTTP_200_OK)
+        response.delete_cookie("refreshToken", path="/")
+        return response
+
     @action(
         detail=False,
         methods=["get"],
