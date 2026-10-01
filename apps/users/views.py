@@ -57,6 +57,17 @@ class AuthViewSet(viewsets.GenericViewSet):
             return ResetPasswordSerializer
         return UserSerializer
 
+    def _set_refresh_cookie(self, response, refresh_token, max_age):
+        response.set_cookie(
+            key="refreshToken",
+            value=str(refresh_token),
+            max_age=max_age,
+            httponly=True,
+            secure=False,
+            samesite="Lax",
+            path="/",
+        )
+
     @action(detail=False, methods=["post"], url_path="register")
     def register(self, request):
         serializer = self.get_serializer(data=request.data)
@@ -66,21 +77,14 @@ class AuthViewSet(viewsets.GenericViewSet):
         refresh = RefreshToken.for_user(user)
 
         response = Response(
-        {
-            **UserSerializer(user).data,
-            "access_token": str(refresh.access_token),
-        },
-        status=status.HTTP_200_OK,
-    )
-
-        response.set_cookie(
-            key="refreshToken",
-            value=str(refresh),
-            max_age=SESSION_SECONDS,
-            httponly=True,
-            secure=False,
-            path="/api/auth/",
+            {
+                **UserSerializer(user).data,
+                "access_token": str(refresh.access_token),
+            },
+            status=status.HTTP_200_OK,
         )
+
+        self._set_refresh_cookie(response, refresh, SESSION_SECONDS)
 
         return response
 
@@ -104,23 +108,16 @@ class AuthViewSet(viewsets.GenericViewSet):
         access = refresh.access_token
 
         response = Response(
-        {
-            **UserSerializer(user).data,
-            "access_token": str(access),
-        },
-        status=status.HTTP_200_OK,
-    )
+            {
+                **UserSerializer(user).data,
+                "access_token": str(access),
+            },
+            status=status.HTTP_200_OK,
+        )
 
         max_age = REMEMBER_ME_SECONDS if remember_me else SESSION_SECONDS
 
-        response.set_cookie(
-            key="refreshToken",
-            value=str(refresh),
-            max_age=max_age,
-            httponly=True,
-            secure=False,
-            path="/api/auth/",
-        )
+        self._set_refresh_cookie(response, refresh, max_age)
 
         return response
 
