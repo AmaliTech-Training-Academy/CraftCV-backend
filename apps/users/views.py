@@ -59,7 +59,6 @@ class AuthViewSet(viewsets.GenericViewSet):
         return UserSerializer
 
     def _set_refresh_cookie(self, response, refresh_token, max_age):
-        response.delete_cookie("refreshToken", path="/")
         response.set_cookie(
             key="refreshToken",
             value=str(refresh_token),
@@ -136,7 +135,7 @@ class AuthViewSet(viewsets.GenericViewSet):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
         response = Response({"detail": "Logged out."}, status=status.HTTP_200_OK)
-        response.delete_cookie("refreshToken", path="/")
+        response.delete_cookie("refreshToken", path="/", sameSite="Lax")
         return response
 
     @action(
