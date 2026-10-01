@@ -66,12 +66,12 @@ class AuthViewSet(viewsets.GenericViewSet):
         refresh = RefreshToken.for_user(user)
 
         response = Response(
-            {
-                "user": UserSerializer(user).data,
-                "access_token": str(refresh.access_token),
-            },
-            status=status.HTTP_201_CREATED,
-        )
+        {
+            **UserSerializer(user).data,
+            "access_token": str(refresh.access_token),
+        },
+        status=status.HTTP_200_OK,
+    )
 
         response.set_cookie(
             key="refreshToken",
@@ -104,9 +104,12 @@ class AuthViewSet(viewsets.GenericViewSet):
         access = refresh.access_token
 
         response = Response(
-            {"user": UserSerializer(user).data, "access_token": str(access)},
-            status=status.HTTP_200_OK,
-        )
+        {
+            **UserSerializer(user).data,
+            "access_token": str(access),
+        },
+        status=status.HTTP_200_OK,
+    )
 
         max_age = REMEMBER_ME_SECONDS if remember_me else SESSION_SECONDS
 
@@ -121,7 +124,7 @@ class AuthViewSet(viewsets.GenericViewSet):
 
         return response
 
-    @action(detail=False, methods=["post"], url_path="logout")
+    @action(detail=False, methods=["post"], url_path="logout", permission_classes=[IsAuthenticated])
     def logout(self, request):
         refresh_token = request.COOKIES.get("refreshToken")
 
