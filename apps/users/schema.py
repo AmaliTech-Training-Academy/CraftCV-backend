@@ -52,9 +52,9 @@ auth_schema = {
         operation_id="auth_logout",
         summary="Log User Out",
         description="Log the current user out of the application.",
-        responses={ 200: OpenApiResponse(
-        description='returns a response as {"detail": "Logged out"}'
-    )},
+        responses={
+            200: OpenApiResponse(description='returns a response as {"detail": "Logged out"}')
+        },
         tags=["Authentication"],
     ),
     "me": extend_schema(
