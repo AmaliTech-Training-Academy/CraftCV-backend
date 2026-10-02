@@ -1,3 +1,6 @@
+
+from datetime import timedelta
+
 from django.contrib.auth import authenticate, get_user_model
 from drf_spectacular.utils import extend_schema_view
 from rest_framework import status, viewsets
@@ -6,6 +9,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.settings import api_settings as jwt_settings
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.users.models import VerificationCode
@@ -24,9 +28,8 @@ from .serializers import (
 
 User = get_user_model()
 
-REMEMBER_ME_SECONDS = 30 * 24 * 60 * 60
-SESSION_SECONDS = 12 * 60 * 60
-
+REMEMBER_ME_SECONDS = timedelta(days=30)
+DEFAULT_REFRESH_LIFETIME = jwt_settings.REFRESH_TOKEN_LIFETIME
 
 @extend_schema_view(**auth_schema)
 class AuthViewSet(viewsets.GenericViewSet):
@@ -58,11 +61,11 @@ class AuthViewSet(viewsets.GenericViewSet):
             return ResetPasswordSerializer
         return UserSerializer
 
-    def _set_refresh_cookie(self, response, refresh_token, max_age):
+    def _set_refresh_cookie(self, response, refresh_token, lifetime: timedelta):
         response.set_cookie(
             key="refreshToken",
             value=str(refresh_token),
-            max_age=max_age,
+            max_age=int(lifetime.total_seconds()),
             httponly=True,
             secure=False,
             samesite="Lax",
@@ -85,7 +88,7 @@ class AuthViewSet(viewsets.GenericViewSet):
             status=status.HTTP_201_CREATED,
         )
 
-        self._set_refresh_cookie(response, refresh, SESSION_SECONDS)
+        self._set_refresh_cookie(response, refresh, DEFAULT_REFRESH_LIFETIME)
 
         return response
 
@@ -116,7 +119,7 @@ class AuthViewSet(viewsets.GenericViewSet):
             status=status.HTTP_200_OK,
         )
 
-        max_age = REMEMBER_ME_SECONDS if remember_me else SESSION_SECONDS
+        max_age = REMEMBER_ME_SECONDS if remember_me else DEFAULT_REFRESH_LIFETIME
 
         self._set_refresh_cookie(response, refresh, max_age)
 
@@ -135,7 +138,7 @@ class AuthViewSet(viewsets.GenericViewSet):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
         response = Response({"detail": "Logged out."}, status=status.HTTP_200_OK)
-        response.delete_cookie("refreshToken", path="/", sameSite="Lax")
+        response.delete_cookie("refreshToken", path="/", samesite="Lax")
         return response
 
     @action(
