@@ -135,7 +135,7 @@ class AuthViewSet(viewsets.GenericViewSet):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
         response = Response({"detail": "Logged out."}, status=status.HTTP_200_OK)
-        response.delete_cookie("refreshToken", path="/", sameSite="Lax")
+        response.delete_cookie("refreshToken", path="/", samesite="Lax")
         return response
 
     @action(
