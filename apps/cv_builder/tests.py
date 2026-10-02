@@ -337,7 +337,7 @@ class CVAPITestCase(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data["message"], "CV saved successfully")
+        self.assertEqual(response.data["message"], "CV updated successfully")
         self.assertEqual(response.data["title"], "Updated draft CV")
         self.assertEqual(
             response.data["professional_summary"],
@@ -442,7 +442,7 @@ class CVAPITestCase(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data["message"], "CV saved successfully")
+        self.assertEqual(response.data["message"], "CV updated successfully")
 
         self.assertEqual(
             response.data["professional_summary"],

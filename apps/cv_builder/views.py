@@ -153,7 +153,7 @@ class CVDetailView(SuccessResponseMixin, generics.RetrieveUpdateDestroyAPIView):
 
     def patch(self, request, *args, **kwargs):
         response = self.partial_update(request, *args, **kwargs)
-        response.data["message"] = "CV saved successfully"
+        response.data["message"] = "CV updated successfully"
         return response
 
 
