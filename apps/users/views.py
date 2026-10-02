@@ -1,4 +1,3 @@
-
 from datetime import timedelta
 
 from django.contrib.auth import authenticate, get_user_model
@@ -30,6 +29,7 @@ User = get_user_model()
 
 REMEMBER_ME_SECONDS = timedelta(days=30)
 DEFAULT_REFRESH_LIFETIME = jwt_settings.REFRESH_TOKEN_LIFETIME
+
 
 @extend_schema_view(**auth_schema)
 class AuthViewSet(viewsets.GenericViewSet):
