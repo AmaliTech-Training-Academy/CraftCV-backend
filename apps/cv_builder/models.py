@@ -4,6 +4,7 @@ import uuid
 from django.conf import settings
 from django.db import models
 from django.db.models.functions import Lower
+from django.utils.text import slugify
 
 
 # Create your models here.
@@ -11,12 +12,17 @@ class Template(models.Model):
     template_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=150, unique=True)
     description = models.TextField(blank=True)
-    design = models.TextField()
+    slug = models.SlugField(unique=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.name
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = slugify(self.name)
+        super().save(*args, **kwargs)
 
 
 class PersonalDetail(models.Model):
@@ -52,6 +58,7 @@ class Education(models.Model):
     field_of_study = models.CharField(max_length=150)
     start_date = models.DateField()
     end_date = models.DateField(null=True, blank=True)
+    is_current = models.BooleanField(default=False)
     description = models.TextField(blank=True)
     display_order = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -74,6 +81,7 @@ class Experience(models.Model):
     location = models.CharField(max_length=150, blank=True)
     start_date = models.DateField()
     end_date = models.DateField(null=True, blank=True)
+    is_current = models.BooleanField(default=False)
     description = models.TextField(blank=True)
     display_order = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)

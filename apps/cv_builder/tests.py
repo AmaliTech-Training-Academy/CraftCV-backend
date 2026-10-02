@@ -34,7 +34,6 @@ class CVAPITestCase(TestCase):
         self.template = Template.objects.create(
             name="Professional",
             description="Professional CV template",
-            design="professional",
         )
 
         self.education = Education.objects.create(
@@ -84,7 +83,7 @@ class CVAPITestCase(TestCase):
                 "template_id": str(self.template.template_id),
                 "name": "Professional",
                 "description": "Professional CV template",
-                "design": "professional",
+                "slug": "professional",
             },
         )
 
