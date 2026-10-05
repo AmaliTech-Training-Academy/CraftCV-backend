@@ -127,7 +127,7 @@ class CVDetailView(SuccessResponseMixin, generics.RetrieveUpdateDestroyAPIView):
     serializer_class = CVSerializer
     permission_classes = [IsAuthenticated]
     lookup_field = "cv_id"
-    http_method_names = ["get", "patch", "head", "options"]
+    http_method_names = ["get", "patch", "delete", "head", "options"]
 
     def get_queryset(self):
         return (
@@ -157,7 +157,7 @@ class CVDetailView(SuccessResponseMixin, generics.RetrieveUpdateDestroyAPIView):
         return response
 
 
-class PersonalDetailView(generics.RetrieveUpdateAPIView):
+class PersonalDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = PersonalDetailSerializer
     permission_classes = [IsAuthenticated]
 
@@ -176,6 +176,10 @@ class PersonalDetailView(generics.RetrieveUpdateAPIView):
         response.data["message"] = "Personal details updated successfully"
 
         return response
+
+    def perform_destroy(self, instance):
+        instance.delete()
+        mark_user_cvs_as_saved(self.request.user)
 
     def put(self, request, *args, **kwargs):
         try:

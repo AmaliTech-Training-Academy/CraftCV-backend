@@ -138,6 +138,32 @@ class CVAPITestCase(TestCase):
         self.assertEqual(personal_detail.email, "updated@example.com")
         self.assertEqual(personal_detail.linkedin_url, "")
 
+    def test_deleting_personal_details_preserves_cvs_and_updates_timestamps(self):
+        self.authenticate()
+        PersonalDetail.objects.create(
+            user=self.user,
+            first_name="First",
+            last_name="Last",
+            email="user@example.com",
+            phone="1234567890",
+            location="Accra",
+        )
+        previous_saved_at = timezone.now() - timedelta(days=1)
+        cv = CV.objects.create(
+            user=self.user,
+            template=self.template,
+            title="My CV",
+            last_saved_at=previous_saved_at,
+        )
+
+        response = self.client.delete("/api/cvs/personal-details/")
+
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(PersonalDetail.objects.filter(user=self.user).exists())
+        cv.refresh_from_db()
+        self.assertGreater(cv.last_saved_at, previous_saved_at)
+        self.assertTrue(CV.objects.filter(cv_id=cv.cv_id).exists())
+
     def test_unauthenticated_user_cannot_list_cvs(self):
         response = self.client.get("/api/cvs/")
 
@@ -314,6 +340,32 @@ class CVAPITestCase(TestCase):
             response.data["cv_id"],
             str(cv.cv_id),
         )
+
+    def test_user_can_delete_own_cv(self):
+        self.authenticate()
+        cv = CV.objects.create(
+            user=self.user,
+            template=self.template,
+            title="My CV",
+        )
+
+        response = self.client.delete(f"/api/cvs/{cv.cv_id}/")
+
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(CV.objects.filter(cv_id=cv.cv_id).exists())
+
+    def test_user_cannot_delete_another_users_cv(self):
+        self.authenticate()
+        another_cv = CV.objects.create(
+            user=self.another_user,
+            template=self.template,
+            title="Private CV",
+        )
+
+        response = self.client.delete(f"/api/cvs/{another_cv.cv_id}/")
+
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(CV.objects.filter(cv_id=another_cv.cv_id).exists())
 
     def test_patching_cv_saves_draft_and_updates_last_saved_at(self):
         self.authenticate()
