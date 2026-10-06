@@ -107,7 +107,9 @@ class CVListCreateView(generics.ListCreateAPIView):
         return response
 
 
-class CVDetailView(SuccessResponseMixin, generics.RetrieveUpdateDestroyAPIView):
+class CVDetailView(
+    SuccessResponseMixin, DestroyResponseMixin, generics.RetrieveUpdateDestroyAPIView
+):
     serializer_class = CVSerializer
     permission_classes = [IsAuthenticated]
     lookup_field = "cv_id"
@@ -142,7 +144,7 @@ class CVDetailView(SuccessResponseMixin, generics.RetrieveUpdateDestroyAPIView):
         return response
 
 
-class PersonalDetailView(generics.RetrieveUpdateAPIView):
+class PersonalDetailView(generics.RetrieveUpdateAPIView, DestroyResponseMixin):
     serializer_class = PersonalDetailSerializer
     permission_classes = [IsAuthenticated]
 
