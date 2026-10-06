@@ -256,12 +256,14 @@ class CVSerializer(serializers.ModelSerializer):
             "additional_information",
             "created_at",
             "updated_at",
+            "last_saved_at",
         )
 
         read_only_fields = (
             "cv_id",
             "created_at",
             "updated_at",
+            "last_saved_at",
         )
 
     def validate(self, attrs):

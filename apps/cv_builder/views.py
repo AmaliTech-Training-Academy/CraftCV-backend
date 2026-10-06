@@ -1,3 +1,4 @@
+from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.exceptions import NotFound
 from rest_framework.permissions import IsAuthenticated
@@ -27,6 +28,21 @@ from .serializers import (
     SkillSerializer,
     TemplateSerializer,
 )
+from .services.cv_save import mark_cvs_as_saved, mark_user_cvs_as_saved
+
+
+class UpdateRelatedCVTimestampsMixin:
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        mark_cvs_as_saved(instance.cvs.all())
+
+    def perform_destroy(self, instance):
+        affected_cv_ids = list(instance.cvs.values_list("cv_id", flat=True))
+
+        instance.delete()
+
+        affected_cvs = CV.objects.filter(cv_id__in=affected_cv_ids)
+        mark_cvs_as_saved(affected_cvs)
 
 
 class DestroyResponseMixin:
@@ -113,7 +129,7 @@ class CVDetailView(
     serializer_class = CVSerializer
     permission_classes = [IsAuthenticated]
     lookup_field = "cv_id"
-    http_method_names = ["get", "put", "head", "options"]
+    http_method_names = ["get", "patch", "delete", "head", "options"]
 
     def get_queryset(self):
         return (
@@ -134,13 +150,12 @@ class CVDetailView(
             )
         )
 
-    def put(self, request, *args, **kwargs):
-        response = self.update(
-            request,
-            *args,
-            partial=True,
-            **kwargs,
-        )
+    def perform_update(self, serializer):
+        serializer.save(last_saved_at=timezone.now())
+
+    def patch(self, request, *args, **kwargs):
+        response = self.partial_update(request, *args, **kwargs)
+        response.data["message"] = "CV updated successfully"
         return response
 
 
@@ -154,6 +169,20 @@ class PersonalDetailView(generics.RetrieveUpdateAPIView, DestroyResponseMixin):
         except PersonalDetail.DoesNotExist:
             raise NotFound("Personal details have not been created yet.") from None
 
+    def perform_update(self, serializer):
+        serializer.save()
+        mark_user_cvs_as_saved(self.request.user)
+
+    def patch(self, request, *args, **kwargs):
+        response = self.partial_update(request, *args, **kwargs)
+        response.data["message"] = "Personal details updated successfully"
+
+        return response
+
+    def perform_destroy(self, instance):
+        instance.delete()
+        mark_user_cvs_as_saved(self.request.user)
+
     def put(self, request, *args, **kwargs):
         try:
             personal_detail = PersonalDetail.objects.get(user=request.user)
@@ -163,6 +192,7 @@ class PersonalDetailView(generics.RetrieveUpdateAPIView, DestroyResponseMixin):
 
             serializer.is_valid(raise_exception=True)
             serializer.save(user=request.user)
+            mark_user_cvs_as_saved(request.user)
 
             return Response(
                 {**serializer.data, "message": "Personal details created successfully."},
@@ -172,11 +202,10 @@ class PersonalDetailView(generics.RetrieveUpdateAPIView, DestroyResponseMixin):
         serializer = self.get_serializer(
             personal_detail,
             data=request.data,
-            partial=True,
         )
 
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        self.perform_update(serializer)
 
         return Response(
             {**serializer.data, "message": "Personal details updated successfully."},
@@ -211,6 +240,7 @@ class EducationListCreateView(SuccessResponseMixin, generics.ListCreateAPIView):
 class EducationDetailView(
     SuccessResponseMixin,
     DestroyResponseMixin,
+    UpdateRelatedCVTimestampsMixin,
     generics.RetrieveUpdateDestroyAPIView,
 ):
     serializer_class = EducationSerializer
@@ -248,6 +278,7 @@ class ExperienceListCreateView(SuccessResponseMixin, generics.ListCreateAPIView)
 class ExperienceDetailView(
     SuccessResponseMixin,
     DestroyResponseMixin,
+    UpdateRelatedCVTimestampsMixin,
     generics.RetrieveUpdateDestroyAPIView,
 ):
     serializer_class = ExperienceSerializer
@@ -285,6 +316,7 @@ class SkillListCreateView(SuccessResponseMixin, generics.ListCreateAPIView):
 class SkillDetailView(
     SuccessResponseMixin,
     DestroyResponseMixin,
+    UpdateRelatedCVTimestampsMixin,
     generics.RetrieveUpdateDestroyAPIView,
 ):
     serializer_class = SkillSerializer
@@ -322,6 +354,7 @@ class CertificationListCreateView(SuccessResponseMixin, generics.ListCreateAPIVi
 class CertificationDetailView(
     SuccessResponseMixin,
     DestroyResponseMixin,
+    UpdateRelatedCVTimestampsMixin,
     generics.RetrieveUpdateDestroyAPIView,
 ):
     serializer_class = CertificationSerializer
@@ -359,6 +392,7 @@ class LanguageListCreateView(SuccessResponseMixin, generics.ListCreateAPIView):
 class LanguageDetailView(
     SuccessResponseMixin,
     DestroyResponseMixin,
+    UpdateRelatedCVTimestampsMixin,
     generics.RetrieveUpdateDestroyAPIView,
 ):
     serializer_class = LanguageSerializer
@@ -396,6 +430,7 @@ class AwardListCreateView(SuccessResponseMixin, generics.ListCreateAPIView):
 class AwardDetailView(
     SuccessResponseMixin,
     DestroyResponseMixin,
+    UpdateRelatedCVTimestampsMixin,
     generics.RetrieveUpdateDestroyAPIView,
 ):
     serializer_class = AwardSerializer
@@ -433,6 +468,7 @@ class AdditionalInformationListCreateView(SuccessResponseMixin, generics.ListCre
 class AdditionalInformationDetailView(
     SuccessResponseMixin,
     DestroyResponseMixin,
+    UpdateRelatedCVTimestampsMixin,
     generics.RetrieveUpdateDestroyAPIView,
 ):
     serializer_class = AdditionalInformationSerializer

@@ -1,5 +1,9 @@
+from datetime import timedelta
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from rest_framework.test import APIClient
 
 from apps.cv_builder.models import (
@@ -10,6 +14,7 @@ from apps.cv_builder.models import (
     Education,
     Experience,
     Language,
+    PersonalDetail,
     Skill,
     Template,
 )
@@ -31,9 +36,9 @@ class CVAPITestCase(TestCase):
             password="StrongPassword123!",
         )
 
-        self.template = Template.objects.create(
+        self.template, _ = Template.objects.get_or_create(
             name="Professional",
-            description="Professional CV template",
+            defaults={"description": "Professional CV template"},
         )
 
         self.education = Education.objects.create(
@@ -65,6 +70,100 @@ class CVAPITestCase(TestCase):
     def authenticate(self):
         self.client.force_authenticate(user=self.user)
 
+    def test_personal_detail_put_requires_complete_data_for_existing_record(self):
+        self.authenticate()
+        personal_detail = PersonalDetail.objects.create(
+            user=self.user,
+            first_name="First",
+            last_name="Last",
+            email="user@example.com",
+            phone="1234567890",
+            location="Accra",
+            linkedin_url="https://linkedin.com/in/first",
+        )
+
+        put_response = self.client.put(
+            "/api/cvs/personal-details/",
+            {"first_name": "Updated"},
+            format="json",
+        )
+
+        self.assertEqual(put_response.status_code, 400)
+        self.assertIn("last_name", put_response.data)
+        self.assertIn("email", put_response.data)
+
+        patch_response = self.client.patch(
+            "/api/cvs/personal-details/",
+            {"first_name": "Updated"},
+            format="json",
+        )
+
+        self.assertEqual(patch_response.status_code, 200)
+        personal_detail.refresh_from_db()
+        self.assertEqual(personal_detail.first_name, "Updated")
+        self.assertEqual(personal_detail.last_name, "Last")
+
+    def test_personal_detail_put_updates_existing_record_with_complete_data(self):
+        self.authenticate()
+        personal_detail = PersonalDetail.objects.create(
+            user=self.user,
+            first_name="First",
+            last_name="Last",
+            email="user@example.com",
+            phone="1234567890",
+            location="Accra",
+            linkedin_url="https://linkedin.com/in/first",
+        )
+
+        response = self.client.put(
+            "/api/cvs/personal-details/",
+            {
+                "first_name": "Updated",
+                "last_name": "Person",
+                "email": "updated@example.com",
+                "phone": "0987654321",
+                "location": "Kumasi",
+                "linkedin_url": "",
+                "website_url": "",
+                "github_url": "",
+                "twitter_url": "",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        personal_detail.refresh_from_db()
+        self.assertEqual(personal_detail.first_name, "Updated")
+        self.assertEqual(personal_detail.last_name, "Person")
+        self.assertEqual(personal_detail.email, "updated@example.com")
+        self.assertEqual(personal_detail.linkedin_url, "")
+
+    def test_deleting_personal_details_preserves_cvs_and_updates_timestamps(self):
+        self.authenticate()
+        PersonalDetail.objects.create(
+            user=self.user,
+            first_name="First",
+            last_name="Last",
+            email="user@example.com",
+            phone="1234567890",
+            location="Accra",
+        )
+        previous_saved_at = timezone.now() - timedelta(days=1)
+        cv = CV.objects.create(
+            user=self.user,
+            template=self.template,
+            title="My CV",
+            last_saved_at=previous_saved_at,
+        )
+
+        response = self.client.delete("/api/cvs/personal-details/")
+
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(PersonalDetail.objects.filter(user=self.user).exists())
+        cv.refresh_from_db()
+        self.assertGreater(cv.last_saved_at, previous_saved_at)
+        self.assertTrue(CV.objects.filter(cv_id=cv.cv_id).exists())
+
     def test_unauthenticated_user_cannot_list_cvs(self):
         response = self.client.get("/api/cvs/")
 
@@ -76,15 +175,14 @@ class CVAPITestCase(TestCase):
         response = self.client.get("/api/templates/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.data), 1)
-        self.assertEqual(
-            response.data[0],
+        self.assertIn(
             {
                 "template_id": str(self.template.template_id),
-                "name": "Professional",
-                "description": "Professional CV template",
-                "slug": "professional",
+                "name": self.template.name,
+                "description": self.template.description,
+                "slug": self.template.slug,
             },
+            response.data,
         )
 
     def test_authenticated_user_can_create_and_list_cv_sections(self):
@@ -243,6 +341,95 @@ class CVAPITestCase(TestCase):
             str(cv.cv_id),
         )
 
+    def test_user_can_delete_own_cv(self):
+        self.authenticate()
+        cv = CV.objects.create(
+            user=self.user,
+            template=self.template,
+            title="My CV",
+        )
+
+        response = self.client.delete(f"/api/cvs/{cv.cv_id}/")
+
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(CV.objects.filter(cv_id=cv.cv_id).exists())
+
+    def test_user_cannot_delete_another_users_cv(self):
+        self.authenticate()
+        another_cv = CV.objects.create(
+            user=self.another_user,
+            template=self.template,
+            title="Private CV",
+        )
+
+        response = self.client.delete(f"/api/cvs/{another_cv.cv_id}/")
+
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(CV.objects.filter(cv_id=another_cv.cv_id).exists())
+
+    def test_patching_cv_saves_draft_and_updates_last_saved_at(self):
+        self.authenticate()
+
+        previous_saved_at = timezone.now() - timedelta(days=1)
+        cv = CV.objects.create(
+            user=self.user,
+            template=self.template,
+            title="Draft CV",
+            professional_summary="Original summary",
+            last_saved_at=previous_saved_at,
+        )
+
+        response = self.client.patch(
+            f"/api/cvs/{cv.cv_id}/",
+            {
+                "title": "Updated draft CV",
+                "professional_summary": "Updated draft summary",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["message"], "CV updated successfully")
+        self.assertEqual(response.data["title"], "Updated draft CV")
+        self.assertEqual(
+            response.data["professional_summary"],
+            "Updated draft summary",
+        )
+
+        cv.refresh_from_db()
+        self.assertGreater(cv.last_saved_at, previous_saved_at)
+        self.assertEqual(
+            parse_datetime(response.data["last_saved_at"]),
+            cv.last_saved_at,
+        )
+
+    def test_retrieving_cv_returns_saved_draft_and_last_saved_at(self):
+        self.authenticate()
+
+        saved_at = timezone.now() - timedelta(days=1)
+        cv = CV.objects.create(
+            user=self.user,
+            template=self.template,
+            title="Saved draft CV",
+            professional_summary="Saved draft summary",
+            last_saved_at=saved_at,
+        )
+        cv.educations.add(self.education)
+
+        response = self.client.get(f"/api/cvs/{cv.cv_id}/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["title"], "Saved draft CV")
+        self.assertEqual(
+            response.data["professional_summary"],
+            "Saved draft summary",
+        )
+        self.assertEqual(len(response.data["educations"]), 1)
+        self.assertEqual(
+            parse_datetime(response.data["last_saved_at"]),
+            saved_at,
+        )
+
     def test_user_cannot_access_another_users_cv(self):
         self.authenticate()
 
@@ -298,7 +485,7 @@ class CVAPITestCase(TestCase):
         cv.experiences.add(self.experience)
         cv.skills.add(self.skill)
 
-        response = self.client.put(
+        response = self.client.patch(
             f"/api/cvs/{cv.cv_id}/",
             {
                 "professional_summary": "Updated summary",
@@ -307,7 +494,7 @@ class CVAPITestCase(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data["message"], "CV updated successfully.")
+        self.assertEqual(response.data["message"], "CV updated successfully")
 
         self.assertEqual(
             response.data["professional_summary"],
@@ -341,7 +528,7 @@ class CVAPITestCase(TestCase):
 
         cv.educations.add(self.education)
 
-        response = self.client.put(
+        response = self.client.patch(
             f"/api/cvs/{cv.cv_id}/",
             {
                 "educations": [],
