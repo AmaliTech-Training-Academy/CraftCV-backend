@@ -260,6 +260,6 @@ class AuthViewSet(viewsets.GenericViewSet):
             )
 
         return Response(
-            {"access": str(refresh.access_token)},
+            {"access_token": str(refresh.access_token)},
             status=status.HTTP_200_OK,
         )

@@ -1,5 +1,6 @@
 # apps/users/schema.py
-from drf_spectacular.utils import OpenApiResponse, extend_schema
+from drf_spectacular.utils import OpenApiResponse, extend_schema, inline_serializer
+from rest_framework import serializers
 
 from .serializers import (
     ForgotPasswordSerializer,
@@ -115,8 +116,24 @@ auth_schema = {
         ),
         request=None,
         responses={
-            200: OpenApiResponse(description="New access token issued"),
-            401: OpenApiResponse(description="Missing or invalid refresh token"),
+            200: OpenApiResponse(
+                response=inline_serializer(
+                    name="RefreshTokenResponse",
+                    fields={
+                        "access_token": serializers.CharField(),
+                    },
+                ),
+                description="New access token issued",
+            ),
+            401: OpenApiResponse(
+                response=inline_serializer(
+                    name="RefreshTokenError",
+                    fields={
+                        "error": serializers.CharField(),
+                    },
+                ),
+                description="Missing or invalid refresh token",
+            ),
         },
         tags=["Authentication"],
     ),
