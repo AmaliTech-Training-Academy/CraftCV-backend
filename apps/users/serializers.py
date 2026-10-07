@@ -25,6 +25,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
             "blank": "Password field cannot be empty.",
             "required": "Password is required.",
         },
+        validators=[validate_password],
     )
     agree_to_terms = serializers.BooleanField(required=True)
 
