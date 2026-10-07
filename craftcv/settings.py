@@ -139,22 +139,20 @@ AUTH_PASSWORD_VALIDATORS = [
         "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
     {
-        'NAME': 'django_password_validators.password_history.password_validation.UniquePasswordsValidator',
-        'OPTIONS': {
-            'last_passwords': 0
-        }
+        "NAME": "django_password_validators.password_history.password_validation.UniquePasswordsValidator",
+        "OPTIONS": {"last_passwords": 5},
     },
     {
-        'NAME': 'django_password_validators.password_character_requirements.password_validation.PasswordCharacterValidator',
-        'OPTIONS': {
-            'min_length_digit': 1,
-            'min_length_alpha': 1,
-            'min_length_special': 1,
-            'min_length_lower': 1,
-            'min_length_upper': 1,
-            'special_characters': "~!@#$%^&*()_+{}\":;'[]-=,.<>/?\\|`"
-        }
-    }
+        "NAME": "django_password_validators.password_character_requirements.password_validation.PasswordCharacterValidator",
+        "OPTIONS": {
+            "min_length_digit": 1,
+            "min_length_alpha": 1,
+            "min_length_special": 1,
+            "min_length_lower": 1,
+            "min_length_upper": 1,
+            "special_characters": "~!@#$%^&*()_+{}\":;'[]-=,.<>/?\\|`",
+        },
+    },
 ]
 
 
