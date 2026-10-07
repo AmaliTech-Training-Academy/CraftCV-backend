@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 from rest_framework import serializers
 
 User = get_user_model()
@@ -109,6 +110,14 @@ class ResetPasswordSerializer(serializers.Serializer):
         },
     )
 
-    def validate_new_password(self, value):
-        validate_password(value)
-        return value
+    def validate(self, data: dict):
+        user = User.objects.filter(email__iexact=data.get("email")).first()
+        if user is None:
+            raise serializers.ValidationError({"email": "Invalid email or code."}) from None
+
+        try:
+            validate_password(data.get("new_password"), user=user)
+        except ValidationError as err:
+            raise serializers.ValidationError({"new_password": list(err.messages)}) from None
+
+        return data
