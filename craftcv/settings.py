@@ -139,7 +139,7 @@ AUTH_PASSWORD_VALIDATORS = [
         "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
     {
-        "NAME": "django_password_validators.password_history.password_validation.UniquePasswordsValidator",
+        "NAME": "apps.users.validators.CustomUniquePasswordsValidator",
         "OPTIONS": {"last_passwords": 5},
     },
     {
