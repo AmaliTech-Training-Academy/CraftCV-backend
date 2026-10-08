@@ -47,6 +47,7 @@ class EducationSerializer(serializers.ModelSerializer):
             "institution",
             "degree",
             "field_of_study",
+            "location",
             "start_date",
             "end_date",
             "is_current",
