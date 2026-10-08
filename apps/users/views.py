@@ -17,12 +17,14 @@ from apps.users.services.verification import issue_code, verify_code
 
 from .schema import auth_schema
 from .serializers import (
+    EmptySerializer,
     ForgotPasswordSerializer,
     LoginSerializer,
     ResetPasswordSerializer,
     UserCreateSerializer,
     UserSerializer,
     VerifyCodeSerializer,
+    VerifyEmailSerializer,
 )
 
 User = get_user_model()
@@ -36,7 +38,7 @@ class AuthViewSet(viewsets.GenericViewSet):
     permission_classes = [AllowAny]
 
     def get_permissions(self):
-        if self.action in (
+        if self.action is None or self.action in (
             "register",
             "login",
             "logout",
@@ -44,21 +46,28 @@ class AuthViewSet(viewsets.GenericViewSet):
             "verify_code",
             "reset_password",
             "refresh",
+            "verify_email",
         ):
             return [AllowAny()]
         return [IsAuthenticated()]
 
     def get_serializer_class(self):
-        if self.action == "register":
+        action = self.action or self.action_map.get("post")
+
+        if action == "register":
             return UserCreateSerializer
-        elif self.action == "login":
+        elif action == "login":
             return LoginSerializer
-        elif self.action == "forgot_password":
+        elif action == "forgot_password":
             return ForgotPasswordSerializer
-        elif self.action == "verify_code":
+        elif action == "verify_code":
             return VerifyCodeSerializer
-        elif self.action == "reset_password":
+        elif action == "reset_password":
             return ResetPasswordSerializer
+        elif action == "verify_email":
+            return VerifyEmailSerializer
+        elif action in ("refresh", "logout"):
+            return EmptySerializer
         return UserSerializer
 
     def _set_refresh_cookie(self, response, refresh_token, lifetime: timedelta):
@@ -89,19 +98,45 @@ class AuthViewSet(viewsets.GenericViewSet):
             status=status.HTTP_201_CREATED,
         )
 
-        # refresh = RefreshToken.for_user(user)
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="verify-email",
+        permission_classes=[AllowAny],
+    )
+    def verify_email(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
 
-        # response = Response(
-        #     {
-        #         "user": UserSerializer(user).data,
-        #         "access_token": str(refresh.access_token),
-        #     },
-        #     status=status.HTTP_201_CREATED,
-        # )
+        email = serializer.validated_data["email"]
+        code = serializer.validated_data["code"]
 
-        # self._set_refresh_cookie(response, refresh, DEFAULT_REFRESH_LIFETIME)
+        GENERIC_ERROR = "Invalid or expired verification code."
 
-        # return response
+        user = User.objects.filter(email__iexact=email).first()
+        if user is None:
+            return Response({"error": GENERIC_ERROR}, status=status.HTTP_400_BAD_REQUEST)
+
+        if user.email_verified:
+            return Response({"message": "Email already verified."}, status=status.HTTP_200_OK)
+
+        if not verify_code(user, VerificationCode.Purpose.EMAIL_VERIFICATION, code):
+            return Response({"error": GENERIC_ERROR}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.email_verified = True
+        user.save(update_fields=["email_verified"])
+
+        refresh = RefreshToken.for_user(user)
+        response = Response(
+            {
+                "message": "Email verified successfully.",
+                "user": UserSerializer(user).data,
+                "access_token": str(refresh.access_token),
+            },
+            status=status.HTTP_200_OK,
+        )
+        self._set_refresh_cookie(response, refresh, DEFAULT_REFRESH_LIFETIME)
+        return response
 
     @action(detail=False, methods=["post"], url_path="login")
     def login(self, request):
@@ -268,6 +303,7 @@ class AuthViewSet(viewsets.GenericViewSet):
     )
     def refresh(self, request):
         token = request.COOKIES.get("refreshToken")
+        print(token)
 
         if not token:
             return Response({"error": "No refresh token"}, status=status.HTTP_401_UNAUTHORIZED)
