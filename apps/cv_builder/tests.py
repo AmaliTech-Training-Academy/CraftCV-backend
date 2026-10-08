@@ -46,6 +46,7 @@ class CVAPITestCase(TestCase):
             institution="University of Mines and Technology",
             degree="BSc",
             field_of_study="Computer Science and Engineering",
+            location="Tarkwa, Ghana",
             start_date="2024-10-01",
             description="Computer science studies",
             display_order=0,
@@ -195,6 +196,7 @@ class CVAPITestCase(TestCase):
                     "institution": "University of Ghana",
                     "degree": "MSc",
                     "field_of_study": "Information Technology",
+                    "location": "Accra, Ghana",
                     "start_date": "2025-10-01",
                 },
                 Education,
@@ -452,6 +454,7 @@ class CVAPITestCase(TestCase):
             institution="Another University",
             degree="BSc",
             field_of_study="Computer Science",
+            location="Koforidua, Ghana",
             start_date="2024-10-01",
         )
 
@@ -576,6 +579,7 @@ class CVAPITestCase(TestCase):
             institution="University One",
             degree="BSc",
             field_of_study="Computer Science",
+            location="Accra, Ghana",
             start_date="2020-10-01",
         )
 
@@ -584,6 +588,7 @@ class CVAPITestCase(TestCase):
             institution="University Two",
             degree="MSc",
             field_of_study="Computer Science",
+            location="Kumasi, Ghana",
             start_date="2024-10-01",
         )
 
@@ -640,6 +645,7 @@ def test_removing_education_from_cv_does_not_delete_education(self):
         institution="University",
         degree="BSc",
         field_of_study="Computer Science",
+        location="Ho, Ghana",
         start_date="2024-01-01",
     )
 

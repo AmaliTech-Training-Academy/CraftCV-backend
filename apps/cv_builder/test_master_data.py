@@ -42,6 +42,7 @@ class MasterDataAPITestCase(TestCase):
             "institution": "University of Mines and Technology",
             "degree": "BSc",
             "field_of_study": "Computer Science and Engineering",
+            "location": "Tarkwa, Ghana",
             "start_date": "2024-10-01",
             "end_date": None,
             "description": "Computer science studies",
@@ -59,6 +60,7 @@ class MasterDataAPITestCase(TestCase):
             response.data["institution"],
             "University of Mines and Technology",
         )
+        self.assertEqual(response.data["location"], "Tarkwa, Ghana")
 
         self.assertTrue(
             Education.objects.filter(
@@ -74,6 +76,7 @@ class MasterDataAPITestCase(TestCase):
             "institution": "University of Mines and Technology",
             "degree": "BSc",
             "field_of_study": "Computer Science",
+            "location": "Tarkwa, Ghana",
             "start_date": "2024-10-01",
             "end_date": None,
             "description": "First education",
@@ -84,6 +87,7 @@ class MasterDataAPITestCase(TestCase):
             "institution": "Takoradi Technical University",
             "degree": "HND",
             "field_of_study": "Electrical Engineering",
+            "location": "Takoradi, Ghana",
             "start_date": "2020-10-01",
             "end_date": "2023-06-30",
             "description": "Second education",
@@ -118,6 +122,7 @@ class MasterDataAPITestCase(TestCase):
             institution="Old University",
             degree="BSc",
             field_of_study="Computer Science",
+            location="Kumasi, Ghana",
             start_date="2024-10-01",
         )
 
@@ -125,6 +130,7 @@ class MasterDataAPITestCase(TestCase):
             f"/api/cvs/educations/{education.education_id}/",
             {
                 "institution": "University of Mines and Technology",
+                "location": "Accra, Ghana",
             },
             format="json",
         )
@@ -137,6 +143,7 @@ class MasterDataAPITestCase(TestCase):
             education.institution,
             "University of Mines and Technology",
         )
+        self.assertEqual(education.location, "Accra, Ghana")
 
     def test_user_can_delete_individual_education(self):
         self.authenticate()
@@ -146,6 +153,7 @@ class MasterDataAPITestCase(TestCase):
             institution="University One",
             degree="BSc",
             field_of_study="Computer Science",
+            location="Accra, Ghana",
             start_date="2024-10-01",
         )
 
@@ -154,6 +162,7 @@ class MasterDataAPITestCase(TestCase):
             institution="University Two",
             degree="HND",
             field_of_study="Electrical Engineering",
+            location="Tamale, Ghana",
             start_date="2020-10-01",
         )
 
