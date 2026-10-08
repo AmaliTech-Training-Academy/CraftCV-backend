@@ -16,6 +16,7 @@ class User(AbstractBaseUser):
     )
     agree_to_terms = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
+    email_verified = models.BooleanField(default=False)
     objects = CustomUserManager()
 
     USERNAME_FIELD = "email"
@@ -30,6 +31,7 @@ class User(AbstractBaseUser):
 class VerificationCode(models.Model):
     class Purpose(models.TextChoices):
         PASSWORD_RESET = "password_reset", "Password Reset"
+        EMAIL_VERIFICATION = "email_verification", "Email Verification"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(
