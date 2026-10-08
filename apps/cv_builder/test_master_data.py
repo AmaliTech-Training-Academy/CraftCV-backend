@@ -466,13 +466,59 @@ class MasterDataAPITestCase(TestCase):
                 "name": "AWS Cloud Engineering",
                 "issuer": "CloudWithShad",
                 "issue_date": "2026-01-15",
+                "expiration_date": "2029-01-15",
+                "does_not_expire": False,
+                "credential_id": "AWS-12345",
                 "credential_url": "",
+                "description": "Cloud engineering certification",
                 "display_order": 0,
             },
             format="json",
         )
 
         self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["expiration_date"], "2029-01-15")
+        self.assertFalse(response.data["does_not_expire"])
+        self.assertEqual(response.data["credential_id"], "AWS-12345")
+        self.assertEqual(response.data["description"], "Cloud engineering certification")
+
+    def test_certification_can_be_created_without_expiration(self):
+        self.authenticate()
+
+        response = self.client.post(
+            "/api/cvs/certifications/",
+            {
+                "name": "Lifetime Cloud Certification",
+                "issuer": "CloudWithShad",
+                "issue_date": "2026-01-15",
+                "does_not_expire": True,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertIsNone(response.data["expiration_date"])
+        self.assertTrue(response.data["does_not_expire"])
+        self.assertEqual(response.data["credential_id"], "")
+        self.assertEqual(response.data["description"], "")
+
+    def test_certification_cannot_have_expiration_date_and_not_expire_flag(self):
+        self.authenticate()
+
+        response = self.client.post(
+            "/api/cvs/certifications/",
+            {
+                "name": "Conflicting Certification",
+                "issuer": "CloudWithShad",
+                "issue_date": "2026-01-15",
+                "expiration_date": "2029-01-15",
+                "does_not_expire": True,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("expiration_date", response.data)
 
     def test_language_can_be_created(self):
         self.authenticate()

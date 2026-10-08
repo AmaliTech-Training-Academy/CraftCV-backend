@@ -130,10 +130,35 @@ class CertificationSerializer(serializers.ModelSerializer):
             "name",
             "issuer",
             "issue_date",
+            "expiration_date",
+            "does_not_expire",
+            "credential_id",
             "credential_url",
+            "description",
             "display_order",
         ]
         read_only_fields = ["certification_id"]
+
+    def validate(self, attrs):
+        does_not_expire = attrs.get(
+            "does_not_expire",
+            getattr(self.instance, "does_not_expire", False),
+        )
+        expiration_date = attrs.get(
+            "expiration_date",
+            getattr(self.instance, "expiration_date", None),
+        )
+
+        if does_not_expire and expiration_date is not None:
+            raise serializers.ValidationError(
+                {
+                    "expiration_date": (
+                        "Expiration date must be empty if certification does not expire."
+                    )
+                }
+            )
+
+        return attrs
 
 
 class LanguageSerializer(serializers.ModelSerializer):
