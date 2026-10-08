@@ -20,3 +20,19 @@ def send_password_reset_code(to_email: str, code: str) -> None:
         )
     except Exception:
         logger.exception("Failed to send password reset email to %s", to_email)
+
+
+def send_email_verification_code(to_email: str, code: str) -> None:
+    try:
+        send_mail(
+            subject="Verify your email",
+            message=(
+                f"Welcome to CraftCV! Your email verification code is: {code}\n"
+                "It expires in 15 minutes."
+            ),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[to_email],
+            fail_silently=False,
+        )
+    except Exception:
+        logger.exception("Failed to send password reset email to %s", to_email)
