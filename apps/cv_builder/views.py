@@ -53,7 +53,7 @@ class DestroyResponseMixin:
 
         return Response(
             {"message": f"{resource_name} deleted successfully."},
-            status=200,
+            status=status.HTTP_204_NO_CONTENT,
         )
 
 
@@ -158,10 +158,19 @@ class CVDetailView(
         response.data["message"] = "CV updated successfully"
         return response
 
+    def delete(self, request, *args, **kwargs):
+        instance = self.get_object()
+        self.perform_destroy(instance)
+        return Response(
+            {"message": "CV deleted successfully."},
+            status=status.HTTP_204_NO_CONTENT,
+        )
+
 
 class PersonalDetailView(generics.RetrieveUpdateAPIView, DestroyResponseMixin):
     serializer_class = PersonalDetailSerializer
     permission_classes = [IsAuthenticated]
+    http_method_names = ["get", "patch", "put", "delete", "head", "options"]
 
     def get_object(self):
         try:
@@ -182,6 +191,14 @@ class PersonalDetailView(generics.RetrieveUpdateAPIView, DestroyResponseMixin):
     def perform_destroy(self, instance):
         instance.delete()
         mark_user_cvs_as_saved(self.request.user)
+
+    def delete(self, request, *args, **kwargs):
+        instance = self.get_object()
+        self.perform_destroy(instance)
+        return Response(
+            {"message": "Personal details deleted successfully."},
+            status=status.HTTP_204_NO_CONTENT,
+        )
 
     def put(self, request, *args, **kwargs):
         try:

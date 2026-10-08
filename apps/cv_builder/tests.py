@@ -208,7 +208,7 @@ class CVAPITestCase(TestCase):
                 },
                 Experience,
             ),
-            ("skills", {"name": "Django"}, Skill),
+            ("skills", {"name": "Django", "level": "Advanced"}, Skill),
             (
                 "certifications",
                 {
@@ -559,7 +559,7 @@ class CVAPITestCase(TestCase):
 
         response = self.client.delete(f"/api/cvs/educations/{self.education.education_id}/")
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 204)
         self.assertEqual(response.data, {"message": "Education deleted successfully."})
 
         response = self.client.get(f"/api/cvs/{cv.cv_id}/")

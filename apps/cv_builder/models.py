@@ -100,6 +100,7 @@ class Skill(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="skills"
     )
     name = models.CharField(max_length=100)
+    level = models.CharField(max_length=20, blank=True)
     display_order = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

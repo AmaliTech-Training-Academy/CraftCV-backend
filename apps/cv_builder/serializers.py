@@ -97,11 +97,15 @@ class ExperienceSerializer(serializers.ModelSerializer):
 class SkillSerializer(serializers.ModelSerializer):
     class Meta:
         model = Skill
-        fields = ["skill_id", "name", "display_order"]
+        fields = ["skill_id", "name", "level", "display_order"]
         read_only_fields = ["skill_id"]
 
     def validate_name(self, value):
-        user = self.context["request"].user
+        request = self.context.get("request")
+        if request is None:
+            return value
+
+        user = request.user
 
         queryset = Skill.objects.filter(
             user=user,

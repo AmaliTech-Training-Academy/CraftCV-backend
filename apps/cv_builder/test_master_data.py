@@ -159,7 +159,7 @@ class MasterDataAPITestCase(TestCase):
 
         response = self.client.delete(f"/api/cvs/educations/{education_1.education_id}/")
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 204)
         self.assertEqual(response.data["message"], "Education deleted successfully.")
 
         self.assertFalse(Education.objects.filter(education_id=education_1.education_id).exists())
@@ -321,7 +321,7 @@ class MasterDataAPITestCase(TestCase):
 
         response = self.client.delete(f"/api/cvs/experiences/{experience_1.experience_id}/")
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 204)
         self.assertEqual(response.data["message"], "Experience deleted successfully.")
 
         self.assertFalse(
@@ -378,6 +378,7 @@ class MasterDataAPITestCase(TestCase):
             "/api/cvs/skills/",
             {
                 "name": "Python",
+                "level": "Advanced",
                 "display_order": 0,
             },
             format="json",
@@ -385,17 +386,22 @@ class MasterDataAPITestCase(TestCase):
 
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data["name"], "Python")
+        self.assertEqual(response.data["level"], "Advanced")
 
     def test_user_can_have_multiple_skills(self):
         self.authenticate()
 
-        skills = ["Python", "Django", "PostgreSQL"]
+        skills = [
+            {"name": "Python", "level": "Advanced"},
+            {"name": "Django", "level": "Intermediate"},
+            {"name": "PostgreSQL", "level": "Advanced"},
+        ]
 
         for skill in skills:
             response = self.client.post(
                 "/api/cvs/skills/",
                 {
-                    "name": skill,
+                    **skill,
                     "display_order": 0,
                 },
                 format="json",
@@ -437,7 +443,7 @@ class MasterDataAPITestCase(TestCase):
 
         response = self.client.delete(f"/api/cvs/skills/{skill.skill_id}/")
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 204)
         self.assertEqual(response.data["message"], "Skill deleted successfully.")
 
         self.assertFalse(Skill.objects.filter(skill_id=skill.skill_id).exists())
