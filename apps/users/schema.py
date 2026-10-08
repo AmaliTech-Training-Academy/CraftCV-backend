@@ -142,15 +142,15 @@ auth_schema = {
         operation_id="auth_verify_email",
         summary="Verify Email with code",
         description=(
-        "Confirm a newly registered account by submitting the 6-digit code that was "
-        "emailed to the user. On success, `email_verified` is set to True, the code is "
-        "consumed, and the endpoint responds with the user's data plus a short-lived "
-        "`accessToken`. A long-lived `refreshToken` is set as an HttpOnly cookie."
+            "Confirm a newly registered account by submitting the 6-digit code that was "
+            "emailed to the user. On success, `email_verified` is set to True, the code is "
+            "consumed, and the endpoint responds with the user's data plus a short-lived "
+            "`accessToken`. A long-lived `refreshToken` is set as an HttpOnly cookie."
         ),
         request=VerifyEmailSerializer,
         responses={
             200: OpenApiResponse(
-                response= TokenPayloadSerializer,
+                response=TokenPayloadSerializer,
                 description=(
                     "Email verified. Response body includes `message`, `user`, and "
                     "`accessToken`. A `refreshToken` HttpOnly cookie is set."
@@ -159,7 +159,7 @@ auth_schema = {
             400: OpenApiResponse(
                 description="Invalid or expired verification code.",
             ),
-    },
+        },
         tags=["Authentication"],
     ),
 }
