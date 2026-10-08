@@ -12,7 +12,7 @@ from rest_framework_simplejwt.settings import api_settings as jwt_settings
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.users.models import VerificationCode
-from apps.users.services.email import send_password_reset_code
+from apps.users.services.email import send_email_verification_code, send_password_reset_code
 from apps.users.services.verification import issue_code, verify_code
 
 from .schema import auth_schema
@@ -78,19 +78,30 @@ class AuthViewSet(viewsets.GenericViewSet):
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
 
-        refresh = RefreshToken.for_user(user)
+        raw = issue_code(user, VerificationCode.Purpose.EMAIL_VERIFICATION)
+        send_email_verification_code(user.email, raw)
 
-        response = Response(
+        return Response(
             {
-                "user": UserSerializer(user).data,
-                "access_token": str(refresh.access_token),
+                "message": "Account created. Please check your email for a verification code.",
+                "email": user.email,
             },
             status=status.HTTP_201_CREATED,
         )
 
-        self._set_refresh_cookie(response, refresh, DEFAULT_REFRESH_LIFETIME)
+        # refresh = RefreshToken.for_user(user)
 
-        return response
+        # response = Response(
+        #     {
+        #         "user": UserSerializer(user).data,
+        #         "access_token": str(refresh.access_token),
+        #     },
+        #     status=status.HTTP_201_CREATED,
+        # )
+
+        # self._set_refresh_cookie(response, refresh, DEFAULT_REFRESH_LIFETIME)
+
+        # return response
 
     @action(detail=False, methods=["post"], url_path="login")
     def login(self, request):
@@ -106,6 +117,16 @@ class AuthViewSet(viewsets.GenericViewSet):
             return Response(
                 {"error": "Invalid email or password."},
                 status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        if not user.email_verified:
+            return Response(
+                {
+                    "error": "Email not verified.",
+                    "code": "email_not_verified",
+                    "email": user.email,
+                },
+                status=status.HTTP_403_FORBIDDEN,
             )
 
         refresh = RefreshToken.for_user(user)
