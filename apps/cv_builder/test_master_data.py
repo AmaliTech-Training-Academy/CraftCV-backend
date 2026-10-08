@@ -42,6 +42,7 @@ class MasterDataAPITestCase(TestCase):
             "institution": "University of Mines and Technology",
             "degree": "BSc",
             "field_of_study": "Computer Science and Engineering",
+            "location": "Tarkwa, Ghana",
             "start_date": "2024-10-01",
             "end_date": None,
             "description": "Computer science studies",
@@ -59,6 +60,7 @@ class MasterDataAPITestCase(TestCase):
             response.data["institution"],
             "University of Mines and Technology",
         )
+        self.assertEqual(response.data["location"], "Tarkwa, Ghana")
 
         self.assertTrue(
             Education.objects.filter(
@@ -74,6 +76,7 @@ class MasterDataAPITestCase(TestCase):
             "institution": "University of Mines and Technology",
             "degree": "BSc",
             "field_of_study": "Computer Science",
+            "location": "Tarkwa, Ghana",
             "start_date": "2024-10-01",
             "end_date": None,
             "description": "First education",
@@ -84,6 +87,7 @@ class MasterDataAPITestCase(TestCase):
             "institution": "Takoradi Technical University",
             "degree": "HND",
             "field_of_study": "Electrical Engineering",
+            "location": "Takoradi, Ghana",
             "start_date": "2020-10-01",
             "end_date": "2023-06-30",
             "description": "Second education",
@@ -118,6 +122,7 @@ class MasterDataAPITestCase(TestCase):
             institution="Old University",
             degree="BSc",
             field_of_study="Computer Science",
+            location="Kumasi, Ghana",
             start_date="2024-10-01",
         )
 
@@ -125,6 +130,7 @@ class MasterDataAPITestCase(TestCase):
             f"/api/cvs/educations/{education.education_id}/",
             {
                 "institution": "University of Mines and Technology",
+                "location": "Accra, Ghana",
             },
             format="json",
         )
@@ -137,6 +143,7 @@ class MasterDataAPITestCase(TestCase):
             education.institution,
             "University of Mines and Technology",
         )
+        self.assertEqual(education.location, "Accra, Ghana")
 
     def test_user_can_delete_individual_education(self):
         self.authenticate()
@@ -146,6 +153,7 @@ class MasterDataAPITestCase(TestCase):
             institution="University One",
             degree="BSc",
             field_of_study="Computer Science",
+            location="Accra, Ghana",
             start_date="2024-10-01",
         )
 
@@ -154,12 +162,13 @@ class MasterDataAPITestCase(TestCase):
             institution="University Two",
             degree="HND",
             field_of_study="Electrical Engineering",
+            location="Tamale, Ghana",
             start_date="2020-10-01",
         )
 
         response = self.client.delete(f"/api/cvs/educations/{education_1.education_id}/")
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 204)
         self.assertEqual(response.data["message"], "Education deleted successfully.")
 
         self.assertFalse(Education.objects.filter(education_id=education_1.education_id).exists())
@@ -321,7 +330,7 @@ class MasterDataAPITestCase(TestCase):
 
         response = self.client.delete(f"/api/cvs/experiences/{experience_1.experience_id}/")
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 204)
         self.assertEqual(response.data["message"], "Experience deleted successfully.")
 
         self.assertFalse(
@@ -378,6 +387,7 @@ class MasterDataAPITestCase(TestCase):
             "/api/cvs/skills/",
             {
                 "name": "Python",
+                "level": "Advanced",
                 "display_order": 0,
             },
             format="json",
@@ -385,17 +395,22 @@ class MasterDataAPITestCase(TestCase):
 
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data["name"], "Python")
+        self.assertEqual(response.data["level"], "Advanced")
 
     def test_user_can_have_multiple_skills(self):
         self.authenticate()
 
-        skills = ["Python", "Django", "PostgreSQL"]
+        skills = [
+            {"name": "Python", "level": "Advanced"},
+            {"name": "Django", "level": "Intermediate"},
+            {"name": "PostgreSQL", "level": "Advanced"},
+        ]
 
         for skill in skills:
             response = self.client.post(
                 "/api/cvs/skills/",
                 {
-                    "name": skill,
+                    **skill,
                     "display_order": 0,
                 },
                 format="json",
@@ -437,7 +452,7 @@ class MasterDataAPITestCase(TestCase):
 
         response = self.client.delete(f"/api/cvs/skills/{skill.skill_id}/")
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 204)
         self.assertEqual(response.data["message"], "Skill deleted successfully.")
 
         self.assertFalse(Skill.objects.filter(skill_id=skill.skill_id).exists())
@@ -451,13 +466,59 @@ class MasterDataAPITestCase(TestCase):
                 "name": "AWS Cloud Engineering",
                 "issuer": "CloudWithShad",
                 "issue_date": "2026-01-15",
+                "expiration_date": "2029-01-15",
+                "does_not_expire": False,
+                "credential_id": "AWS-12345",
                 "credential_url": "",
+                "description": "Cloud engineering certification",
                 "display_order": 0,
             },
             format="json",
         )
 
         self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["expiration_date"], "2029-01-15")
+        self.assertFalse(response.data["does_not_expire"])
+        self.assertEqual(response.data["credential_id"], "AWS-12345")
+        self.assertEqual(response.data["description"], "Cloud engineering certification")
+
+    def test_certification_can_be_created_without_expiration(self):
+        self.authenticate()
+
+        response = self.client.post(
+            "/api/cvs/certifications/",
+            {
+                "name": "Lifetime Cloud Certification",
+                "issuer": "CloudWithShad",
+                "issue_date": "2026-01-15",
+                "does_not_expire": True,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertIsNone(response.data["expiration_date"])
+        self.assertTrue(response.data["does_not_expire"])
+        self.assertEqual(response.data["credential_id"], "")
+        self.assertEqual(response.data["description"], "")
+
+    def test_certification_cannot_have_expiration_date_and_not_expire_flag(self):
+        self.authenticate()
+
+        response = self.client.post(
+            "/api/cvs/certifications/",
+            {
+                "name": "Conflicting Certification",
+                "issuer": "CloudWithShad",
+                "issue_date": "2026-01-15",
+                "expiration_date": "2029-01-15",
+                "does_not_expire": True,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("expiration_date", response.data)
 
     def test_language_can_be_created(self):
         self.authenticate()

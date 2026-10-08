@@ -47,6 +47,7 @@ class EducationSerializer(serializers.ModelSerializer):
             "institution",
             "degree",
             "field_of_study",
+            "location",
             "start_date",
             "end_date",
             "is_current",
@@ -97,11 +98,15 @@ class ExperienceSerializer(serializers.ModelSerializer):
 class SkillSerializer(serializers.ModelSerializer):
     class Meta:
         model = Skill
-        fields = ["skill_id", "name", "display_order"]
+        fields = ["skill_id", "name", "level", "display_order"]
         read_only_fields = ["skill_id"]
 
     def validate_name(self, value):
-        user = self.context["request"].user
+        request = self.context.get("request")
+        if request is None:
+            return value
+
+        user = request.user
 
         queryset = Skill.objects.filter(
             user=user,
@@ -125,10 +130,35 @@ class CertificationSerializer(serializers.ModelSerializer):
             "name",
             "issuer",
             "issue_date",
+            "expiration_date",
+            "does_not_expire",
+            "credential_id",
             "credential_url",
+            "description",
             "display_order",
         ]
         read_only_fields = ["certification_id"]
+
+    def validate(self, attrs):
+        does_not_expire = attrs.get(
+            "does_not_expire",
+            getattr(self.instance, "does_not_expire", False),
+        )
+        expiration_date = attrs.get(
+            "expiration_date",
+            getattr(self.instance, "expiration_date", None),
+        )
+
+        if does_not_expire and expiration_date is not None:
+            raise serializers.ValidationError(
+                {
+                    "expiration_date": (
+                        "Expiration date must be empty if certification does not expire."
+                    )
+                }
+            )
+
+        return attrs
 
 
 class LanguageSerializer(serializers.ModelSerializer):
@@ -256,12 +286,14 @@ class CVSerializer(serializers.ModelSerializer):
             "additional_information",
             "created_at",
             "updated_at",
+            "last_saved_at",
         )
 
         read_only_fields = (
             "cv_id",
             "created_at",
             "updated_at",
+            "last_saved_at",
         )
 
     def validate(self, attrs):
