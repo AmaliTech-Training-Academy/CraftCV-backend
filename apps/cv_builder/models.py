@@ -105,6 +105,7 @@ class Skill(models.Model):
     display_order = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    is_cv_copy = models.BooleanField(default=False)
 
     class Meta:
         constraints = [
@@ -112,6 +113,7 @@ class Skill(models.Model):
                 Lower("name"),
                 "user",
                 name="unique_skill_per_user",
+                condition=models.Q(is_cv_copy=False),
             )
         ]
         ordering = ["display_order", "name"]
