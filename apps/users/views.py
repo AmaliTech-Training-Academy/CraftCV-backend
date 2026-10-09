@@ -20,6 +20,7 @@ from .serializers import (
     EmptySerializer,
     ForgotPasswordSerializer,
     LoginSerializer,
+    ResendVerificationSerializer,
     ResetPasswordSerializer,
     UserCreateSerializer,
     UserSerializer,
@@ -47,6 +48,7 @@ class AuthViewSet(viewsets.GenericViewSet):
             "reset_password",
             "refresh",
             "verify_email",
+            "resend_verification"
         ):
             return [AllowAny()]
         return [IsAuthenticated()]
@@ -66,6 +68,8 @@ class AuthViewSet(viewsets.GenericViewSet):
             return ResetPasswordSerializer
         elif action == "verify_email":
             return VerifyEmailSerializer
+        elif action == "resend_verification":
+            return ResendVerificationSerializer
         elif action in ("refresh", "logout"):
             return EmptySerializer
         return UserSerializer
@@ -137,6 +141,37 @@ class AuthViewSet(viewsets.GenericViewSet):
         )
         self._set_refresh_cookie(response, refresh, DEFAULT_REFRESH_LIFETIME)
         return response
+
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="resend-verification",
+        permission_classes=[AllowAny],
+    )
+    def resend_verification(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        email = serializer.validated_data["email"]
+
+        GENERIC_RESPONSE = {
+            "message": "If an account exists for this email and is not yet verified, "
+            "a new verification code has been sent."
+        }
+
+        user = User.objects.filter(email__iexact=email).first()
+
+        if user is None:
+            return Response(GENERIC_RESPONSE, status=status.HTTP_200_OK)
+
+        if user.email_verified:
+            return Response(GENERIC_RESPONSE, status=status.HTTP_200_OK)
+
+        raw = issue_code(user, VerificationCode.Purpose.EMAIL_VERIFICATION)
+        send_email_verification_code(user.email, raw)
+
+        return Response(GENERIC_RESPONSE, status=status.HTTP_200_OK)
+
 
     @action(detail=False, methods=["post"], url_path="login")
     def login(self, request):
