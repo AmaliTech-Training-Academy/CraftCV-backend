@@ -291,6 +291,148 @@ class CVAPITestCase(TestCase):
             1,
         )
 
+    def test_user_can_duplicate_cv_with_independent_sections(self):
+        self.authenticate()
+        certification = Certification.objects.create(
+            user=self.user,
+            name="AWS Developer",
+            issuer="Amazon",
+            issue_date="2025-01-01",
+        )
+        language = Language.objects.create(
+            user=self.user,
+            name="English",
+            proficiency=Language.Proficiency.FLUENT,
+        )
+        award = Award.objects.create(user=self.user, name="Engineering Award")
+        additional_information = AdditionalInformation.objects.create(
+            user=self.user,
+            title="Availability",
+            content="Available immediately",
+        )
+        source = CV.objects.create(
+            user=self.user,
+            template=self.template,
+            title="General CV",
+            professional_summary="Original summary",
+        )
+        source.educations.add(self.education)
+        source.experiences.add(self.experience)
+        source.skills.add(self.skill)
+        source.certifications.add(certification)
+        source.languages.add(language)
+        source.awards.add(award)
+        source.additional_information.add(additional_information)
+
+        response = self.client.post(f"/api/cvs/{source.cv_id}/duplicate/")
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["message"], "CV duplicated successfully.")
+        self.assertEqual(response.data["title"], "Copy of General CV")
+        self.assertEqual(response.data["professional_summary"], source.professional_summary)
+        self.assertEqual(response.data["template"], self.template.template_id)
+        duplicate = CV.objects.get(cv_id=response.data["cv_id"])
+
+        for section_name in (
+            "educations",
+            "experiences",
+            "skills",
+            "certifications",
+            "languages",
+            "awards",
+            "additional_information",
+        ):
+            with self.subTest(section=section_name):
+                original_record = getattr(source, section_name).get()
+                copied_record = getattr(duplicate, section_name).get()
+                self.assertNotEqual(original_record.pk, copied_record.pk)
+                for field in original_record._meta.concrete_fields:
+                    if (
+                        field.primary_key
+                        or field.auto_created
+                        or getattr(field, "auto_now", False)
+                        or getattr(field, "auto_now_add", False)
+                        or (section_name == "skills" and field.name == "is_cv_copy")
+                    ):
+                        continue
+                    with self.subTest(section=section_name, field=field.name):
+                        self.assertEqual(
+                            getattr(original_record, field.attname),
+                            getattr(copied_record, field.attname),
+                        )
+
+        copied_education = duplicate.educations.get()
+        update_response = self.client.patch(
+            f"/api/cvs/educations/{copied_education.education_id}/",
+            {"degree": "MSc"},
+            format="json",
+        )
+        self.assertEqual(update_response.status_code, 200)
+        self.education.refresh_from_db()
+        copied_education.refresh_from_db()
+        self.assertEqual(self.education.degree, "BSc")
+        self.assertEqual(copied_education.degree, "MSc")
+
+        copied_skill = duplicate.skills.get()
+        skill_update_response = self.client.patch(
+            f"/api/cvs/skills/{copied_skill.skill_id}/",
+            {"name": "Tailored Python"},
+            format="json",
+        )
+        self.assertEqual(skill_update_response.status_code, 200)
+        self.skill.refresh_from_db()
+        copied_skill.refresh_from_db()
+        self.assertEqual(self.skill.name, "Python")
+        self.assertEqual(copied_skill.name, "Tailored Python")
+
+        delete_response = self.client.delete(f"/api/cvs/{duplicate.cv_id}/")
+
+        self.assertEqual(delete_response.status_code, 204)
+        self.assertTrue(CV.objects.filter(cv_id=source.cv_id).exists())
+        self.assertEqual(source.educations.get().degree, "BSc")
+        self.assertEqual(source.skills.get().name, "Python")
+
+    def test_user_cannot_duplicate_another_users_cv(self):
+        self.authenticate()
+        another_users_cv = CV.objects.create(
+            user=self.another_user,
+            template=self.template,
+            title="Private CV",
+        )
+
+        response = self.client.post(f"/api/cvs/{another_users_cv.cv_id}/duplicate/")
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.data["message"], "CV resource not found.")
+        self.assertFalse(CV.objects.filter(user=self.user).exists())
+        self.assertTrue(CV.objects.filter(cv_id=another_users_cv.cv_id).exists())
+
+    def test_user_cannot_duplicate_a_missing_cv(self):
+        self.authenticate()
+
+        response = self.client.post("/api/cvs/00000000-0000-0000-0000-000000000000/duplicate/")
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.data["error"], "No CV matches the given query.")
+        self.assertEqual(response.data["message"], "CV resource not found.")
+        self.assertFalse(CV.objects.filter(user=self.user).exists())
+
+    def test_unauthenticated_user_cannot_duplicate_cv(self):
+        source = CV.objects.create(
+            user=self.user,
+            template=self.template,
+            title="Private CV",
+        )
+
+        response = self.client.post(f"/api/cvs/{source.cv_id}/duplicate/")
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(
+            response.data["message"],
+            "Authentication is required to access CV data.",
+        )
+        self.assertEqual(CV.objects.filter(user=self.user).count(), 1)
+
     def test_empty_cv_list_returns_message(self):
         self.authenticate()
 

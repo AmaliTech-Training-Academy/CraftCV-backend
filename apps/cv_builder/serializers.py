@@ -106,11 +106,15 @@ class SkillSerializer(serializers.ModelSerializer):
         if request is None:
             return value
 
+        if self.instance and self.instance.is_cv_copy:
+            return value
+
         user = request.user
 
         queryset = Skill.objects.filter(
             user=user,
             name__iexact=value,
+            is_cv_copy=False,
         )
 
         if self.instance:

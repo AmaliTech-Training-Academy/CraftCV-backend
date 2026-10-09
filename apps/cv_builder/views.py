@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.exceptions import NotFound
@@ -167,6 +168,77 @@ class CVDetailView(
         )
 
 
+class CVDuplicateView(generics.GenericAPIView):
+    serializer_class = CVSerializer
+    permission_classes = [IsAuthenticated]
+    lookup_field = "cv_id"
+
+    def get_queryset(self):
+        return (
+            CV.objects.filter(user=self.request.user)
+            .select_related("template")
+            .prefetch_related(
+                "educations",
+                "experiences",
+                "skills",
+                "certifications",
+                "languages",
+                "awards",
+                "additional_information",
+            )
+        )
+
+    @staticmethod
+    def _duplicate_sections(source, duplicate):
+        section_names = (
+            "educations",
+            "experiences",
+            "skills",
+            "certifications",
+            "languages",
+            "awards",
+            "additional_information",
+        )
+
+        for section_name in section_names:
+            relation = getattr(source, section_name)
+            section_model = relation.model
+            copied_records = []
+
+            for record in relation.all():
+                values = {
+                    field.attname: getattr(record, field.attname)
+                    for field in section_model._meta.concrete_fields
+                    if not field.primary_key
+                    and not field.auto_created
+                    and not getattr(field, "auto_now", False)
+                    and not getattr(field, "auto_now_add", False)
+                }
+                if section_name == "skills":
+                    values["is_cv_copy"] = True
+                copied_records.append(section_model.objects.create(**values))
+
+            getattr(duplicate, section_name).set(copied_records)
+
+    def post(self, request, *args, **kwargs):
+        source = self.get_object()
+
+        with transaction.atomic():
+            duplicate = CV.objects.create(
+                user=request.user,
+                template=source.template,
+                title=f"Copy of {source.title}"[:150],
+                professional_summary=source.professional_summary,
+            )
+            self._duplicate_sections(source, duplicate)
+
+        serializer = self.get_serializer(duplicate)
+        return Response(
+            {**serializer.data, "message": "CV duplicated successfully."},
+            status=status.HTTP_201_CREATED,
+        )
+
+
 class PersonalDetailView(generics.RetrieveUpdateAPIView, DestroyResponseMixin):
     serializer_class = PersonalDetailSerializer
     permission_classes = [IsAuthenticated]
@@ -311,7 +383,7 @@ class SkillListCreateView(SuccessResponseMixin, generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return Skill.objects.filter(user=self.request.user)
+        return Skill.objects.filter(user=self.request.user, is_cv_copy=False)
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
