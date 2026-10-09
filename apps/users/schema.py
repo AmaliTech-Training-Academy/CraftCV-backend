@@ -5,6 +5,7 @@ from rest_framework import serializers
 from .serializers import (
     ForgotPasswordSerializer,
     LoginSerializer,
+    ResendVerificationSerializer,
     ResetPasswordSerializer,
     TokenPayloadSerializer,
     UserCreateSerializer,
@@ -158,6 +159,21 @@ auth_schema = {
             ),
             400: OpenApiResponse(
                 description="Invalid or expired verification code.",
+            ),
+        },
+        tags=["Authentication"],
+    ),
+    "resend_verification": extend_schema(
+        summary="Resend email verification code",
+        description=(
+            "Re-issues an email verification code for an unverified account. "
+            "Always returns a generic success response to avoid leaking whether "
+            "an account exists."
+        ),
+        request=ResendVerificationSerializer,
+        responses={
+            200: OpenApiResponse(
+                description="Generic success response (sent whether or not the account exists)."
             ),
         },
         tags=["Authentication"],
