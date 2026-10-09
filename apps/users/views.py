@@ -303,7 +303,6 @@ class AuthViewSet(viewsets.GenericViewSet):
     )
     def refresh(self, request):
         token = request.COOKIES.get("refreshToken")
-        print(token)
 
         if not token:
             return Response({"error": "No refresh token"}, status=status.HTTP_401_UNAUTHORIZED)
