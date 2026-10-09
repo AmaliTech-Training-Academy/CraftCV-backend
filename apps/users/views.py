@@ -48,7 +48,7 @@ class AuthViewSet(viewsets.GenericViewSet):
             "reset_password",
             "refresh",
             "verify_email",
-            "resend_verification"
+            "resend_verification",
         ):
             return [AllowAny()]
         return [IsAuthenticated()]
@@ -171,7 +171,6 @@ class AuthViewSet(viewsets.GenericViewSet):
         send_email_verification_code(user.email, raw)
 
         return Response(GENERIC_RESPONSE, status=status.HTTP_200_OK)
-
 
     @action(detail=False, methods=["post"], url_path="login")
     def login(self, request):
