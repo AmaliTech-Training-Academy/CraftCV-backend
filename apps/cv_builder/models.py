@@ -227,6 +227,7 @@ class CV(models.Model):
 
     template = models.ForeignKey(Template, on_delete=models.PROTECT, related_name="cvs")
     title = models.CharField(max_length=150)
+    professional_title = models.CharField(max_length=150, blank=True)
     professional_summary = models.TextField(blank=True)
     educations = models.ManyToManyField(Education, blank=True, related_name="cvs")
     experiences = models.ManyToManyField(Experience, blank=True, related_name="cvs")

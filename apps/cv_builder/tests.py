@@ -256,6 +256,7 @@ class CVAPITestCase(TestCase):
 
         payload = {
             "title": "Software Engineer CV",
+            "professional_title": "Senior Backend Engineer",
             "professional_summary": ("Backend developer interested in cloud computing."),
             "template": str(self.template.template_id),
             "educations": [str(self.education.education_id)],
@@ -274,6 +275,10 @@ class CVAPITestCase(TestCase):
         self.assertEqual(
             response.data["title"],
             "Software Engineer CV",
+        )
+        self.assertEqual(
+            response.data["professional_title"],
+            "Senior Backend Engineer",
         )
 
         self.assertEqual(
@@ -314,6 +319,7 @@ class CVAPITestCase(TestCase):
             user=self.user,
             template=self.template,
             title="General CV",
+            professional_title="Senior Backend Engineer",
             professional_summary="Original summary",
         )
         source.educations.add(self.education)
@@ -329,6 +335,7 @@ class CVAPITestCase(TestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data["message"], "CV duplicated successfully.")
         self.assertEqual(response.data["title"], "Copy of General CV")
+        self.assertEqual(response.data["professional_title"], source.professional_title)
         self.assertEqual(response.data["professional_summary"], source.professional_summary)
         self.assertEqual(response.data["template"], self.template.template_id)
         duplicate = CV.objects.get(cv_id=response.data["cv_id"])
@@ -573,6 +580,28 @@ class CVAPITestCase(TestCase):
             parse_datetime(response.data["last_saved_at"]),
             saved_at,
         )
+
+    def test_professional_title_can_be_updated_without_changing_cv_title(self):
+        self.authenticate()
+        cv = CV.objects.create(
+            user=self.user,
+            template=self.template,
+            title="General CV",
+            professional_title="Backend Engineer",
+        )
+
+        response = self.client.patch(
+            f"/api/cvs/{cv.cv_id}/",
+            {"professional_title": "Senior Backend Engineer"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["title"], "General CV")
+        self.assertEqual(response.data["professional_title"], "Senior Backend Engineer")
+        cv.refresh_from_db()
+        self.assertEqual(cv.title, "General CV")
+        self.assertEqual(cv.professional_title, "Senior Backend Engineer")
 
     def test_user_cannot_access_another_users_cv(self):
         self.authenticate()
