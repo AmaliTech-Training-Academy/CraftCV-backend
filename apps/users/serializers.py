@@ -128,5 +128,9 @@ class VerifyEmailSerializer(serializers.Serializer):
     code = serializers.CharField(min_length=6, max_length=6)
 
 
+class ResendVerificationSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+
 class EmptySerializer(serializers.Serializer):
     pass
