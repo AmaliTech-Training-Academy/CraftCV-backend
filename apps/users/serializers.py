@@ -121,3 +121,16 @@ class ResetPasswordSerializer(serializers.Serializer):
             raise serializers.ValidationError({"new_password": list(err.messages)}) from None
 
         return data
+
+
+class VerifyEmailSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    code = serializers.CharField(min_length=6, max_length=6)
+
+
+class ResendVerificationSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+
+class EmptySerializer(serializers.Serializer):
+    pass
