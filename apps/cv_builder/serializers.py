@@ -278,6 +278,7 @@ class CVSerializer(serializers.ModelSerializer):
         fields = (
             "cv_id",
             "title",
+            "professional_title",
             "personal_detail",
             "professional_summary",
             "template",

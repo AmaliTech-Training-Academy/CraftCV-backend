@@ -228,6 +228,7 @@ class CVDuplicateView(generics.GenericAPIView):
                 user=request.user,
                 template=source.template,
                 title=f"Copy of {source.title}"[:150],
+                professional_title=source.professional_title,
                 professional_summary=source.professional_summary,
             )
             self._duplicate_sections(source, duplicate)
