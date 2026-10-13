@@ -8,6 +8,31 @@ from django.utils.text import slugify
 
 
 # Create your models here.
+class IdempotencyRecord(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="cv_builder_idempotency_records",
+    )
+    endpoint = models.CharField(max_length=100)
+    key = models.CharField(max_length=255)
+    request_hash = models.CharField(max_length=64)
+    response_status = models.PositiveSmallIntegerField(default=201)
+    response_body = models.JSONField(default=dict)
+    expires_at = models.DateTimeField(db_index=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "endpoint", "key"],
+                name="unique_cv_section_idempotency_key",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.user_id}:{self.endpoint}"
+
+
 class Template(models.Model):
     template_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=150, unique=True)
@@ -105,6 +130,7 @@ class Skill(models.Model):
     display_order = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    is_cv_copy = models.BooleanField(default=False)
 
     class Meta:
         constraints = [
@@ -112,6 +138,7 @@ class Skill(models.Model):
                 Lower("name"),
                 "user",
                 name="unique_skill_per_user",
+                condition=models.Q(is_cv_copy=False),
             )
         ]
         ordering = ["display_order", "name"]
@@ -225,6 +252,7 @@ class CV(models.Model):
 
     template = models.ForeignKey(Template, on_delete=models.PROTECT, related_name="cvs")
     title = models.CharField(max_length=150)
+    professional_title = models.CharField(max_length=150, blank=True)
     professional_summary = models.TextField(blank=True)
     educations = models.ManyToManyField(Education, blank=True, related_name="cvs")
     experiences = models.ManyToManyField(Experience, blank=True, related_name="cvs")
