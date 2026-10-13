@@ -39,23 +39,22 @@ DEFAULT_REFRESH_LIFETIME = jwt_settings.REFRESH_TOKEN_LIFETIME
 class AuthViewSet(viewsets.GenericViewSet):
     permission_classes = [AllowAny]
 
-    THROTTLE_SCOPES = {
-        "register": "register",
-        "login": "login",
-        "forgot_password": "password_reset",
-        "verify_code": "verify_code",
-        "reset_password": "verify_code",
-        "resend_verification": "resend_verification",
-        "refresh": "refresh",
-    }
+    THROTTLED_ACTIONS = {
+    "register",
+    "login",
+    "forgot_password",
+    "verify_code",
+    "reset_password",
+    "verify_email",
+    "resend_verification",
+    "refresh",
+}
 
     def get_throttles(self):
-        scope = self.THROTTLE_SCOPES.get(self.action)
-        if not scope:
-            return []
-        throttle = ScopedRateThrottle()
-        throttle.scope = scope
-        return [throttle]
+        if self.action in self.THROTTLED_ACTIONS:
+            self.throttle_scope = self.action
+            return [ScopedRateThrottle()]
+        return []
 
     def get_permissions(self):
         if self.action is None or self.action in (
