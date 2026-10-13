@@ -83,6 +83,20 @@ python manage.py runserver
 | `/api/swagger/` | Swagger UI |
 | `/api/redoc/` | ReDoc UI |
 
+### Idempotent section creates
+
+The CV section collection endpoints accept an optional `Idempotency-Key` header
+on `POST` requests. Reuse the same key when retrying the same create request.
+The response is replayed for the same authenticated user, endpoint, and payload;
+reusing a key with a different payload returns `409 Conflict`. Keys expire after
+24 hours. Requests without the header retain normal create behavior.
+
+After a successful create, use the returned section ID with the detail endpoint's
+`PATCH` method for later edits. Generate a new key for each distinct create.
+Expired keys for the current request are removed during `POST`; run
+`python manage.py purge_idempotency_records` periodically to remove other expired
+keys.
+
 The debug toolbar routes are also mounted while `DEBUG` is on.
 
 ## Project structure

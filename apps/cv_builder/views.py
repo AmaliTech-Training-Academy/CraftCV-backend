@@ -1,7 +1,12 @@
-from django.db import transaction
+import hashlib
+import json
+from datetime import timedelta
+
+from django.core.serializers.json import DjangoJSONEncoder
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 from rest_framework import generics, status
-from rest_framework.exceptions import NotFound
+from rest_framework.exceptions import APIException, NotFound, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -12,6 +17,7 @@ from .models import (
     Certification,
     Education,
     Experience,
+    IdempotencyRecord,
     Language,
     PersonalDetail,
     Skill,
@@ -65,6 +71,9 @@ class SuccessResponseMixin:
 
     def create(self, request, *args, **kwargs):
         response = super().create(request, *args, **kwargs)
+        return self._add_create_success_message(response)
+
+    def _add_create_success_message(self, response):
         response.data["message"] = f"{self._resource_name()} created successfully."
         return response
 
@@ -76,6 +85,98 @@ class SuccessResponseMixin:
     def update(self, request, *args, **kwargs):
         response = super().update(request, *args, **kwargs)
         response.data["message"] = f"{self._resource_name()} updated successfully."
+        return response
+
+
+class IdempotencyKeyConflict(APIException):
+    status_code = status.HTTP_409_CONFLICT
+    default_detail = "This Idempotency-Key was already used with a different request."
+    default_code = "idempotency_key_conflict"
+
+
+class IdempotencyKeyCreateMixin:
+    idempotency_key_max_length = 255
+    idempotency_key_ttl = timedelta(hours=24)
+
+    @staticmethod
+    def _request_hash(data):
+        if hasattr(data, "lists"):
+            data = {key: values if len(values) > 1 else values[0] for key, values in data.lists()}
+
+        payload = json.dumps(
+            data,
+            cls=DjangoJSONEncoder,
+            default=str,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+    def _replay_idempotent_response(self, record, request_hash):
+        if record.request_hash != request_hash:
+            raise IdempotencyKeyConflict()
+
+        return Response(
+            record.response_body,
+            status=record.response_status,
+            headers={"Idempotent-Replayed": "true"},
+        )
+
+    def create(self, request, *args, **kwargs):
+        key = request.headers.get("Idempotency-Key")
+        if key is None:
+            return super().create(request, *args, **kwargs)
+
+        key = key.strip()
+        if not key:
+            raise ValidationError({"Idempotency-Key": "This header cannot be empty."})
+        if len(key) > self.idempotency_key_max_length:
+            raise ValidationError(
+                {"Idempotency-Key": "This header must be 255 characters or fewer."}
+            )
+
+        endpoint = request.resolver_match.view_name or request.path
+        request_hash = self._request_hash(request.data)
+        now = timezone.now()
+        lookup = {
+            "user": request.user,
+            "endpoint": endpoint,
+            "key": key,
+        }
+        IdempotencyRecord.objects.filter(**lookup, expires_at__lte=now).delete()
+        existing_record = IdempotencyRecord.objects.filter(**lookup).first()
+        if existing_record is not None:
+            return self._replay_idempotent_response(existing_record, request_hash)
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            with transaction.atomic():
+                record = IdempotencyRecord.objects.create(
+                    **lookup,
+                    request_hash=request_hash,
+                    expires_at=now + self.idempotency_key_ttl,
+                )
+                self.perform_create(serializer)
+
+                serializer_data = serializer.data
+                response = Response(
+                    serializer_data,
+                    status=status.HTTP_201_CREATED,
+                    headers=self.get_success_headers(serializer_data),
+                )
+                response = self._add_create_success_message(response)
+                response_body = dict(response.data)
+                record.response_body = response_body
+                record.response_status = response.status_code
+                record.save(update_fields=["response_body", "response_status"])
+        except IntegrityError:
+            existing_record = IdempotencyRecord.objects.filter(**lookup).first()
+            if existing_record is None:
+                raise
+            return self._replay_idempotent_response(existing_record, request_hash)
+
         return response
 
 
@@ -303,7 +404,9 @@ class PersonalDetailView(generics.RetrieveUpdateAPIView, DestroyResponseMixin):
         )
 
 
-class EducationListCreateView(SuccessResponseMixin, generics.ListCreateAPIView):
+class EducationListCreateView(
+    IdempotencyKeyCreateMixin, SuccessResponseMixin, generics.ListCreateAPIView
+):
     serializer_class = EducationSerializer
     permission_classes = [IsAuthenticated]
 
@@ -341,7 +444,9 @@ class EducationDetailView(
         return Education.objects.filter(user=self.request.user)
 
 
-class ExperienceListCreateView(SuccessResponseMixin, generics.ListCreateAPIView):
+class ExperienceListCreateView(
+    IdempotencyKeyCreateMixin, SuccessResponseMixin, generics.ListCreateAPIView
+):
     serializer_class = ExperienceSerializer
     permission_classes = [IsAuthenticated]
 
@@ -379,7 +484,9 @@ class ExperienceDetailView(
         return Experience.objects.filter(user=self.request.user)
 
 
-class SkillListCreateView(SuccessResponseMixin, generics.ListCreateAPIView):
+class SkillListCreateView(
+    IdempotencyKeyCreateMixin, SuccessResponseMixin, generics.ListCreateAPIView
+):
     serializer_class = SkillSerializer
     permission_classes = [IsAuthenticated]
 
@@ -417,7 +524,9 @@ class SkillDetailView(
         return Skill.objects.filter(user=self.request.user)
 
 
-class CertificationListCreateView(SuccessResponseMixin, generics.ListCreateAPIView):
+class CertificationListCreateView(
+    IdempotencyKeyCreateMixin, SuccessResponseMixin, generics.ListCreateAPIView
+):
     serializer_class = CertificationSerializer
     permission_classes = [IsAuthenticated]
 
@@ -455,7 +564,9 @@ class CertificationDetailView(
         return Certification.objects.filter(user=self.request.user)
 
 
-class LanguageListCreateView(SuccessResponseMixin, generics.ListCreateAPIView):
+class LanguageListCreateView(
+    IdempotencyKeyCreateMixin, SuccessResponseMixin, generics.ListCreateAPIView
+):
     serializer_class = LanguageSerializer
     permission_classes = [IsAuthenticated]
 
@@ -493,7 +604,9 @@ class LanguageDetailView(
         return Language.objects.filter(user=self.request.user)
 
 
-class AwardListCreateView(SuccessResponseMixin, generics.ListCreateAPIView):
+class AwardListCreateView(
+    IdempotencyKeyCreateMixin, SuccessResponseMixin, generics.ListCreateAPIView
+):
     serializer_class = AwardSerializer
     permission_classes = [IsAuthenticated]
 
@@ -531,7 +644,9 @@ class AwardDetailView(
         return Award.objects.filter(user=self.request.user)
 
 
-class AdditionalInformationListCreateView(SuccessResponseMixin, generics.ListCreateAPIView):
+class AdditionalInformationListCreateView(
+    IdempotencyKeyCreateMixin, SuccessResponseMixin, generics.ListCreateAPIView
+):
     serializer_class = AdditionalInformationSerializer
     permission_classes = [IsAuthenticated]
 
