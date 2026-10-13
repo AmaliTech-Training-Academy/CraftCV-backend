@@ -93,6 +93,9 @@ reusing a key with a different payload returns `409 Conflict`. Keys expire after
 
 After a successful create, use the returned section ID with the detail endpoint's
 `PATCH` method for later edits. Generate a new key for each distinct create.
+Expired keys for the current request are removed during `POST`; run
+`python manage.py purge_idempotency_records` periodically to remove other expired
+keys.
 
 The debug toolbar routes are also mounted while `DEBUG` is on.
 

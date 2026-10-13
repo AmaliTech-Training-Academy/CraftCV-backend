@@ -1,6 +1,10 @@
 from datetime import timedelta
+from io import StringIO
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
+from django.db import IntegrityError
 from django.test import TestCase
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -307,6 +311,7 @@ class CVAPITestCase(TestCase):
                 self.assertEqual(first_response.status_code, 201)
                 self.assertEqual(replay_response.status_code, 201)
                 self.assertEqual(replay_response.data, first_response.data)
+                self.assertEqual(replay_response.headers["Idempotent-Replayed"], "true")
                 self.assertEqual(model.objects.filter(user=self.user).count(), initial_count + 1)
 
     def test_idempotency_key_cannot_be_reused_with_different_payload(self):
@@ -407,6 +412,154 @@ class CVAPITestCase(TestCase):
         self.assertEqual(invalid_response.status_code, 400)
         self.assertEqual(valid_response.status_code, 201)
         self.assertEqual(IdempotencyRecord.objects.count(), 1)
+
+    def test_empty_or_oversized_idempotency_key_is_rejected(self):
+        self.authenticate()
+
+        for key in ("   ", "k" * 256):
+            with self.subTest(key_length=len(key)):
+                response = self.client.post(
+                    "/api/cvs/educations/",
+                    {},
+                    format="json",
+                    HTTP_IDEMPOTENCY_KEY=key,
+                )
+
+                self.assertEqual(response.status_code, 400)
+        self.assertEqual(IdempotencyRecord.objects.count(), 0)
+
+    def test_expired_idempotency_key_can_be_reused(self):
+        self.authenticate()
+        key = "education-expiry"
+        other_users_expired_record = IdempotencyRecord.objects.create(
+            user=self.another_user,
+            endpoint="cv_builder:education-list-create",
+            key=key,
+            request_hash="c" * 64,
+            expires_at=timezone.now() - timedelta(days=1),
+        )
+        payload = {
+            "institution": "University of Ghana",
+            "degree": "MSc",
+            "field_of_study": "Information Technology",
+            "location": "Accra, Ghana",
+            "start_date": "2025-10-01",
+        }
+        response = self.client.post(
+            "/api/cvs/educations/",
+            payload,
+            format="json",
+            HTTP_IDEMPOTENCY_KEY=key,
+        )
+        record = IdempotencyRecord.objects.get(user=self.user, key=key)
+        record.expires_at = timezone.now() - timedelta(seconds=1)
+        record.save(update_fields=["expires_at"])
+        initial_education_count = Education.objects.filter(user=self.user).count()
+
+        reused_response = self.client.post(
+            "/api/cvs/educations/",
+            payload,
+            format="json",
+            HTTP_IDEMPOTENCY_KEY=key,
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(reused_response.status_code, 201)
+        self.assertNotEqual(response.data["education_id"], reused_response.data["education_id"])
+        self.assertEqual(
+            Education.objects.filter(user=self.user).count(),
+            initial_education_count + 1,
+        )
+        self.assertTrue(IdempotencyRecord.objects.filter(pk=other_users_expired_record.pk).exists())
+
+    def test_integrity_error_race_replays_the_winning_response(self):
+        self.authenticate()
+        key = "education-race"
+        payload = {
+            "institution": "University of Ghana",
+            "degree": "MSc",
+            "field_of_study": "Information Technology",
+            "location": "Accra, Ghana",
+            "start_date": "2025-10-01",
+        }
+        first_response = self.client.post(
+            "/api/cvs/educations/",
+            payload,
+            format="json",
+            HTTP_IDEMPOTENCY_KEY=key,
+        )
+        record = IdempotencyRecord.objects.get(key=key)
+        lookup = {"user": self.user, "endpoint": record.endpoint, "key": key}
+        original_filter = IdempotencyRecord.objects.filter
+        exact_lookup_count = 0
+
+        def hide_existing_record_for_initial_lookup(*args, **kwargs):
+            nonlocal exact_lookup_count
+            if kwargs == lookup:
+                exact_lookup_count += 1
+                if exact_lookup_count == 1:
+                    return original_filter(*args, **kwargs).none()
+            return original_filter(*args, **kwargs)
+
+        with (
+            patch.object(
+                IdempotencyRecord.objects,
+                "filter",
+                side_effect=hide_existing_record_for_initial_lookup,
+            ),
+            patch.object(IdempotencyRecord.objects, "create", side_effect=IntegrityError),
+        ):
+            raced_response = self.client.post(
+                "/api/cvs/educations/",
+                payload,
+                format="json",
+                HTTP_IDEMPOTENCY_KEY=key,
+            )
+
+        self.assertEqual(first_response.status_code, 201)
+        self.assertEqual(raced_response.status_code, 201)
+        self.assertEqual(raced_response.data, first_response.data)
+        self.assertEqual(raced_response.headers["Idempotent-Replayed"], "true")
+        self.assertEqual(Education.objects.filter(user=self.user).count(), 2)
+
+    def test_purge_idempotency_records_command_removes_only_expired_records(self):
+        expired_record = IdempotencyRecord.objects.create(
+            user=self.user,
+            endpoint="cv_builder:education-list-create",
+            key="expired",
+            request_hash="a" * 64,
+            expires_at=timezone.now() - timedelta(days=1),
+        )
+        live_record = IdempotencyRecord.objects.create(
+            user=self.user,
+            endpoint="cv_builder:education-list-create",
+            key="live",
+            request_hash="b" * 64,
+            expires_at=timezone.now() + timedelta(days=1),
+        )
+
+        call_command("purge_idempotency_records", stdout=StringIO())
+
+        self.assertFalse(IdempotencyRecord.objects.filter(pk=expired_record.pk).exists())
+        self.assertTrue(IdempotencyRecord.objects.filter(pk=live_record.pk).exists())
+
+    def test_cors_preflight_allows_idempotency_key_header(self):
+        response = self.client.options(
+            "/api/cvs/educations/",
+            HTTP_ORIGIN="http://localhost:3000",
+            HTTP_ACCESS_CONTROL_REQUEST_METHOD="POST",
+            HTTP_ACCESS_CONTROL_REQUEST_HEADERS="authorization,content-type,idempotency-key",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(
+            "idempotency-key",
+            response.headers["access-control-allow-headers"].lower(),
+        )
+        self.assertIn(
+            "idempotent-replayed",
+            response.headers["access-control-expose-headers"].lower(),
+        )
 
     def test_authenticated_user_can_create_cv(self):
         self.authenticate()
@@ -933,68 +1086,64 @@ class CVAPITestCase(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data["educations"]), 2)
 
+    def test_cv_can_contain_multiple_experience_entries(self):
+        self.authenticate()
 
-def test_cv_can_contain_multiple_experience_entries(self):
-    self.authenticate()
+        experience_1 = Experience.objects.create(
+            user=self.user,
+            company="Company One",
+            role="Developer",
+            start_date="2024-01-01",
+        )
 
-    experience_1 = Experience.objects.create(
-        user=self.user,
-        company="Company One",
-        role="Developer",
-        start_date="2024-01-01",
-    )
+        experience_2 = Experience.objects.create(
+            user=self.user,
+            company="Company Two",
+            role="Engineer",
+            start_date="2025-01-01",
+        )
 
-    experience_2 = Experience.objects.create(
-        user=self.user,
-        company="Company Two",
-        role="Engineer",
-        start_date="2025-01-01",
-    )
+        cv = CV.objects.create(
+            user=self.user,
+            template=self.template,
+            title="My CV",
+        )
 
-    cv = CV.objects.create(
-        user=self.user,
-        template=self.template,
-        title="My CV",
-    )
+        cv.experiences.add(experience_1, experience_2)
 
-    cv.experiences.add(experience_1, experience_2)
+        response = self.client.get(f"/api/cvs/{cv.cv_id}/")
 
-    response = self.client.get(f"/api/cvs/{cv.cv_id}/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data["experiences"]), 2)
 
-    self.assertEqual(response.status_code, 200)
-    self.assertEqual(len(response.data["experiences"]), 2)
+    def test_removing_education_from_cv_does_not_delete_education(self):
+        self.authenticate()
 
+        education = Education.objects.create(
+            user=self.user,
+            institution="University",
+            degree="BSc",
+            field_of_study="Computer Science",
+            location="Ho, Ghana",
+            start_date="2024-01-01",
+        )
 
-def test_removing_education_from_cv_does_not_delete_education(self):
-    self.authenticate()
+        cv = CV.objects.create(
+            user=self.user,
+            template=self.template,
+            title="My CV",
+        )
 
-    education = Education.objects.create(
-        user=self.user,
-        institution="University",
-        degree="BSc",
-        field_of_study="Computer Science",
-        location="Ho, Ghana",
-        start_date="2024-01-01",
-    )
+        cv.educations.add(education)
 
-    cv = CV.objects.create(
-        user=self.user,
-        template=self.template,
-        title="My CV",
-    )
+        response = self.client.patch(
+            f"/api/cvs/{cv.cv_id}/",
+            {
+                "educations": [],
+            },
+            format="json",
+        )
 
-    cv.educations.add(education)
-
-    response = self.client.put(
-        f"/api/cvs/{cv.cv_id}/",
-        {
-            "educations": [],
-        },
-        format="json",
-    )
-
-    self.assertEqual(response.status_code, 200)
-
-    self.assertEqual(response.data["educations"], [])
-
-    self.assertTrue(Education.objects.filter(education_id=education.education_id).exists())
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["educations"], [])
+        self.assertTrue(Education.objects.filter(education_id=education.education_id).exists())

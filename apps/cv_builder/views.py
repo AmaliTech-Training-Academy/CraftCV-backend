@@ -71,6 +71,9 @@ class SuccessResponseMixin:
 
     def create(self, request, *args, **kwargs):
         response = super().create(request, *args, **kwargs)
+        return self._add_create_success_message(response)
+
+    def _add_create_success_message(self, response):
         response.data["message"] = f"{self._resource_name()} created successfully."
         return response
 
@@ -113,7 +116,11 @@ class IdempotencyKeyCreateMixin:
         if record.request_hash != request_hash:
             raise IdempotencyKeyConflict()
 
-        return Response(record.response_body, status=record.response_status)
+        return Response(
+            record.response_body,
+            status=record.response_status,
+            headers={"Idempotent-Replayed": "true"},
+        )
 
     def create(self, request, *args, **kwargs):
         key = request.headers.get("Idempotency-Key")
@@ -131,13 +138,12 @@ class IdempotencyKeyCreateMixin:
         endpoint = request.resolver_match.view_name or request.path
         request_hash = self._request_hash(request.data)
         now = timezone.now()
-        IdempotencyRecord.objects.filter(expires_at__lte=now).delete()
-
         lookup = {
             "user": request.user,
             "endpoint": endpoint,
             "key": key,
         }
+        IdempotencyRecord.objects.filter(**lookup, expires_at__lte=now).delete()
         existing_record = IdempotencyRecord.objects.filter(**lookup).first()
         if existing_record is not None:
             return self._replay_idempotent_response(existing_record, request_hash)
@@ -154,17 +160,24 @@ class IdempotencyKeyCreateMixin:
                 )
                 self.perform_create(serializer)
 
-                response_body = dict(serializer.data)
-                response_body["message"] = f"{self._resource_name()} created successfully."
+                serializer_data = serializer.data
+                response = Response(
+                    serializer_data,
+                    status=status.HTTP_201_CREATED,
+                    headers=self.get_success_headers(serializer_data),
+                )
+                response = self._add_create_success_message(response)
+                response_body = dict(response.data)
                 record.response_body = response_body
-                record.save(update_fields=["response_body"])
+                record.response_status = response.status_code
+                record.save(update_fields=["response_body", "response_status"])
         except IntegrityError:
             existing_record = IdempotencyRecord.objects.filter(**lookup).first()
             if existing_record is None:
                 raise
             return self._replay_idempotent_response(existing_record, request_hash)
 
-        return Response(response_body, status=status.HTTP_201_CREATED)
+        return response
 
 
 class CVListCreateView(generics.ListCreateAPIView):
