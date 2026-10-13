@@ -1,4 +1,5 @@
 from rest_framework import status
+from rest_framework.exceptions import Throttled
 from rest_framework.views import exception_handler
 
 
@@ -6,6 +7,14 @@ def custom_exception_handler(exc, context):
     response = exception_handler(exc, context)
 
     if response is None or not isinstance(response.data, dict):
+        return response
+
+    if isinstance(exc, Throttled):
+        response.data = {
+            "error": "Too many requests. Please try again later.",
+            "retry_after": round(exc.wait, 1),
+        }
+        response["Retry-After"] = str(int(exc.wait) + 1)
         return response
 
     if "detail" in response.data:
