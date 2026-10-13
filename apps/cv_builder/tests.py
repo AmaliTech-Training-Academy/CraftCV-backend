@@ -251,6 +251,41 @@ class CVAPITestCase(TestCase):
                 created_data.pop("message")
                 self.assertIn(created_data, list_response.data)
 
+    def test_repeated_identical_education_payload_does_not_create_duplicates(self):
+        self.authenticate()
+
+        payload = {
+            "institution": "St.Johns",
+            "degree": "WASSCE",
+            "field_of_study": "Science",
+            "location": "Takoradi",
+            "start_date": "2018-09-01",
+            "end_date": None,
+            "is_current": False,
+            "description": "",
+            "display_order": 0,
+        }
+
+        first_response = self.client.post(
+            "/api/cvs/educations/",
+            payload,
+            format="json",
+        )
+
+        second_response = self.client.post(
+            "/api/cvs/educations/",
+            {**payload, "education_id": "91f2c819-54d6-4f3c-ac5f-c6d5b7d1f0a2"},
+            format="json",
+        )
+
+        self.assertEqual(first_response.status_code, 201)
+        self.assertEqual(second_response.status_code, 200)
+        self.assertEqual(Education.objects.filter(user=self.user).count(), 2)
+        self.assertEqual(
+            second_response.data["message"],
+            "Education updated successfully.",
+        )
+
     def test_authenticated_user_can_create_cv(self):
         self.authenticate()
 

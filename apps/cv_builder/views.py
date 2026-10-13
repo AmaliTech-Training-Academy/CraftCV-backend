@@ -79,6 +79,56 @@ class SuccessResponseMixin:
         return response
 
 
+class DuplicateSafeCreateMixin:
+    def _build_duplicate_lookup(self, payload):
+        model = self.get_serializer_class().Meta.model
+        lookup = {"user": self.request.user}
+
+        for field in model._meta.concrete_fields:
+            if field.primary_key or field.auto_created:
+                continue
+            if getattr(field, "auto_now", False) or getattr(field, "auto_now_add", False):
+                continue
+            if field.name == "user":
+                continue
+            if field.name in payload:
+                lookup[field.name] = payload[field.name]
+
+        return lookup
+
+    def create(self, request, *args, **kwargs):
+        payload = request.data.copy()
+        model = self.get_serializer_class().Meta.model
+        queryset = self.get_queryset()
+
+        id_field = next(
+            (field.name for field in model._meta.fields if field.primary_key),
+            None,
+        )
+        if id_field and payload.get(id_field):
+            existing_instance = queryset.filter(**{id_field: payload[id_field]}).first()
+            if existing_instance is not None:
+                serializer = self.get_serializer(existing_instance, data=payload)
+                serializer.is_valid(raise_exception=True)
+                serializer.save(user=request.user)
+                response = Response(serializer.data, status=status.HTTP_200_OK)
+                response.data["message"] = f"{self._resource_name()} updated successfully."
+                return response
+
+        lookup = self._build_duplicate_lookup(payload)
+        if lookup:
+            existing_instance = queryset.filter(**lookup).first()
+            if existing_instance is not None:
+                serializer = self.get_serializer(existing_instance, data=payload)
+                serializer.is_valid(raise_exception=True)
+                serializer.save(user=request.user)
+                response = Response(serializer.data, status=status.HTTP_200_OK)
+                response.data["message"] = f"{self._resource_name()} updated successfully."
+                return response
+
+        return super().create(request, *args, **kwargs)
+
+
 class CVListCreateView(generics.ListCreateAPIView):
     serializer_class = CVSerializer
     permission_classes = [IsAuthenticated]
@@ -303,7 +353,9 @@ class PersonalDetailView(generics.RetrieveUpdateAPIView, DestroyResponseMixin):
         )
 
 
-class EducationListCreateView(SuccessResponseMixin, generics.ListCreateAPIView):
+class EducationListCreateView(
+    DuplicateSafeCreateMixin, SuccessResponseMixin, generics.ListCreateAPIView
+):
     serializer_class = EducationSerializer
     permission_classes = [IsAuthenticated]
 
@@ -341,7 +393,9 @@ class EducationDetailView(
         return Education.objects.filter(user=self.request.user)
 
 
-class ExperienceListCreateView(SuccessResponseMixin, generics.ListCreateAPIView):
+class ExperienceListCreateView(
+    DuplicateSafeCreateMixin, SuccessResponseMixin, generics.ListCreateAPIView
+):
     serializer_class = ExperienceSerializer
     permission_classes = [IsAuthenticated]
 
@@ -379,7 +433,9 @@ class ExperienceDetailView(
         return Experience.objects.filter(user=self.request.user)
 
 
-class SkillListCreateView(SuccessResponseMixin, generics.ListCreateAPIView):
+class SkillListCreateView(
+    DuplicateSafeCreateMixin, SuccessResponseMixin, generics.ListCreateAPIView
+):
     serializer_class = SkillSerializer
     permission_classes = [IsAuthenticated]
 
@@ -417,7 +473,9 @@ class SkillDetailView(
         return Skill.objects.filter(user=self.request.user)
 
 
-class CertificationListCreateView(SuccessResponseMixin, generics.ListCreateAPIView):
+class CertificationListCreateView(
+    DuplicateSafeCreateMixin, SuccessResponseMixin, generics.ListCreateAPIView
+):
     serializer_class = CertificationSerializer
     permission_classes = [IsAuthenticated]
 
@@ -455,7 +513,9 @@ class CertificationDetailView(
         return Certification.objects.filter(user=self.request.user)
 
 
-class LanguageListCreateView(SuccessResponseMixin, generics.ListCreateAPIView):
+class LanguageListCreateView(
+    DuplicateSafeCreateMixin, SuccessResponseMixin, generics.ListCreateAPIView
+):
     serializer_class = LanguageSerializer
     permission_classes = [IsAuthenticated]
 
@@ -493,7 +553,9 @@ class LanguageDetailView(
         return Language.objects.filter(user=self.request.user)
 
 
-class AwardListCreateView(SuccessResponseMixin, generics.ListCreateAPIView):
+class AwardListCreateView(
+    DuplicateSafeCreateMixin, SuccessResponseMixin, generics.ListCreateAPIView
+):
     serializer_class = AwardSerializer
     permission_classes = [IsAuthenticated]
 
@@ -531,7 +593,11 @@ class AwardDetailView(
         return Award.objects.filter(user=self.request.user)
 
 
-class AdditionalInformationListCreateView(SuccessResponseMixin, generics.ListCreateAPIView):
+class AdditionalInformationListCreateView(
+    DuplicateSafeCreateMixin,
+    SuccessResponseMixin,
+    generics.ListCreateAPIView,
+):
     serializer_class = AdditionalInformationSerializer
     permission_classes = [IsAuthenticated]
 
