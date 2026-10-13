@@ -221,6 +221,14 @@ REST_FRAMEWORK = {
         "djangorestframework_camel_case.render.CamelCaseJSONRenderer",
         "djangorestframework_camel_case.render.CamelCaseBrowsableAPIRenderer",
     ),
+    "DEFAULT_THROTTLE_RATES": {
+        "login": "5/min",
+        "register": "10/hour",
+        "password_reset": "3/hour",
+        "verify_code": "5/min",
+        "resend_verification": "3/hour",
+        "refresh": "10/min",
+    },
 }
 
 if not DEBUG:
@@ -259,3 +267,10 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:3000",
     "http://127.0.0.1:3001",
 ]
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": os.getenv("REDIS_URL"),
+    }
+}
