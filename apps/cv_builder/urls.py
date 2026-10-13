@@ -8,6 +8,7 @@ from .views import (
     CertificationDetailView,
     CertificationListCreateView,
     CVDetailView,
+    CVDuplicateView,
     CVListCreateView,
     EducationDetailView,
     EducationListCreateView,
@@ -55,5 +56,6 @@ urlpatterns = [
         name="additional-information-detail",
     ),
     path("", CVListCreateView.as_view(), name="cv-list-create"),
+    path("<uuid:cv_id>/duplicate/", CVDuplicateView.as_view(), name="cv-duplicate"),
     path("<uuid:cv_id>/", CVDetailView.as_view(), name="cv-detail"),
 ]

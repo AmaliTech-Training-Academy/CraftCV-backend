@@ -40,15 +40,15 @@ class AuthViewSet(viewsets.GenericViewSet):
     permission_classes = [AllowAny]
 
     THROTTLED_ACTIONS = {
-    "register",
-    "login",
-    "forgot_password",
-    "verify_code",
-    "reset_password",
-    "verify_email",
-    "resend_verification",
-    "refresh",
-}
+        "register",
+        "login",
+        "forgot_password",
+        "verify_code",
+        "reset_password",
+        "verify_email",
+        "resend_verification",
+        "refresh",
+    }
 
     def get_throttles(self):
         if self.action in self.THROTTLED_ACTIONS:
