@@ -13,6 +13,7 @@ from apps.cv_builder.models import (
     Certification,
     Education,
     Experience,
+    IdempotencyRecord,
     Language,
     PersonalDetail,
     Skill,
@@ -251,40 +252,161 @@ class CVAPITestCase(TestCase):
                 created_data.pop("message")
                 self.assertIn(created_data, list_response.data)
 
-    def test_repeated_identical_education_payload_does_not_create_duplicates(self):
+    def test_section_create_idempotency_key_replays_original_response(self):
         self.authenticate()
 
+        section_cases = [
+            (
+                "educations",
+                {
+                    "institution": "University of Ghana",
+                    "degree": "MSc",
+                    "field_of_study": "Information Technology",
+                    "location": "Accra, Ghana",
+                    "start_date": "2025-10-01",
+                },
+                Education,
+            ),
+            (
+                "experiences",
+                {
+                    "company": "CraftCV",
+                    "role": "Software Engineer",
+                    "start_date": "2025-10-01",
+                },
+                Experience,
+            ),
+            ("skills", {"name": "Django", "level": "Advanced"}, Skill),
+            (
+                "certifications",
+                {
+                    "name": "AWS Certified Developer",
+                    "issuer": "Amazon Web Services",
+                    "issue_date": "2025-10-01",
+                },
+                Certification,
+            ),
+            ("languages", {"name": "English", "proficiency": "native"}, Language),
+            ("awards", {"name": "Engineering Award"}, Award),
+            (
+                "additional-information",
+                {"title": "Availability", "content": "Available immediately."},
+                AdditionalInformation,
+            ),
+        ]
+
+        for endpoint, payload, model in section_cases:
+            with self.subTest(endpoint=endpoint):
+                initial_count = model.objects.filter(user=self.user).count()
+                url = f"/api/cvs/{endpoint}/"
+                headers = {"HTTP_IDEMPOTENCY_KEY": "section-create-replay"}
+
+                first_response = self.client.post(url, payload, format="json", **headers)
+                replay_response = self.client.post(url, payload, format="json", **headers)
+
+                self.assertEqual(first_response.status_code, 201)
+                self.assertEqual(replay_response.status_code, 201)
+                self.assertEqual(replay_response.data, first_response.data)
+                self.assertEqual(model.objects.filter(user=self.user).count(), initial_count + 1)
+
+    def test_idempotency_key_cannot_be_reused_with_different_payload(self):
+        self.authenticate()
+        headers = {"HTTP_IDEMPOTENCY_KEY": "education-create"}
+
+        first_response = self.client.post(
+            "/api/cvs/educations/",
+            {
+                "institution": "University of Ghana",
+                "degree": "MSc",
+                "field_of_study": "Information Technology",
+                "location": "Accra, Ghana",
+                "start_date": "2025-10-01",
+            },
+            format="json",
+            **headers,
+        )
+        conflicting_response = self.client.post(
+            "/api/cvs/educations/",
+            {
+                "institution": "University of Ghana",
+                "degree": "PhD",
+                "field_of_study": "Information Technology",
+                "location": "Accra, Ghana",
+                "start_date": "2025-10-01",
+            },
+            format="json",
+            **headers,
+        )
+
+        self.assertEqual(first_response.status_code, 201)
+        self.assertEqual(conflicting_response.status_code, 409)
+        self.assertEqual(Education.objects.filter(user=self.user).count(), 2)
+
+    def test_idempotency_keys_are_scoped_to_the_authenticated_user(self):
+        self.authenticate()
         payload = {
-            "institution": "St.Johns",
-            "degree": "WASSCE",
-            "field_of_study": "Science",
-            "location": "Takoradi",
-            "start_date": "2018-09-01",
-            "end_date": None,
-            "is_current": False,
-            "description": "",
-            "display_order": 0,
+            "institution": "University of Ghana",
+            "degree": "MSc",
+            "field_of_study": "Information Technology",
+            "location": "Accra, Ghana",
+            "start_date": "2025-10-01",
         }
+        headers = {"HTTP_IDEMPOTENCY_KEY": "user-scoped-create"}
 
         first_response = self.client.post(
             "/api/cvs/educations/",
             payload,
             format="json",
+            **headers,
         )
-
+        self.client.force_authenticate(user=self.another_user)
         second_response = self.client.post(
             "/api/cvs/educations/",
-            {**payload, "education_id": "91f2c819-54d6-4f3c-ac5f-c6d5b7d1f0a2"},
+            payload,
             format="json",
+            **headers,
         )
 
         self.assertEqual(first_response.status_code, 201)
-        self.assertEqual(second_response.status_code, 200)
-        self.assertEqual(Education.objects.filter(user=self.user).count(), 2)
-        self.assertEqual(
-            second_response.data["message"],
-            "Education updated successfully.",
+        self.assertEqual(second_response.status_code, 201)
+        self.assertNotEqual(
+            first_response.data["education_id"],
+            second_response.data["education_id"],
         )
+        self.assertEqual(IdempotencyRecord.objects.count(), 2)
+
+    def test_invalid_section_payload_does_not_reserve_idempotency_key(self):
+        self.authenticate()
+        headers = {"HTTP_IDEMPOTENCY_KEY": "education-invalid-then-valid"}
+
+        invalid_response = self.client.post(
+            "/api/cvs/educations/",
+            {
+                "institution": "University of Ghana",
+                "degree": "MSc",
+                "field_of_study": "Information Technology",
+                "location": "Accra, Ghana",
+                "start_date": "2018-13-01",
+            },
+            format="json",
+            **headers,
+        )
+        valid_response = self.client.post(
+            "/api/cvs/educations/",
+            {
+                "institution": "University of Ghana",
+                "degree": "MSc",
+                "field_of_study": "Information Technology",
+                "location": "Accra, Ghana",
+                "start_date": "2018-12-01",
+            },
+            format="json",
+            **headers,
+        )
+
+        self.assertEqual(invalid_response.status_code, 400)
+        self.assertEqual(valid_response.status_code, 201)
+        self.assertEqual(IdempotencyRecord.objects.count(), 1)
 
     def test_authenticated_user_can_create_cv(self):
         self.authenticate()

@@ -8,6 +8,31 @@ from django.utils.text import slugify
 
 
 # Create your models here.
+class IdempotencyRecord(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="cv_builder_idempotency_records",
+    )
+    endpoint = models.CharField(max_length=100)
+    key = models.CharField(max_length=255)
+    request_hash = models.CharField(max_length=64)
+    response_status = models.PositiveSmallIntegerField(default=201)
+    response_body = models.JSONField(default=dict)
+    expires_at = models.DateTimeField(db_index=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "endpoint", "key"],
+                name="unique_cv_section_idempotency_key",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.user_id}:{self.endpoint}"
+
+
 class Template(models.Model):
     template_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=150, unique=True)
