@@ -6,6 +6,7 @@ from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.settings import api_settings as jwt_settings
@@ -37,6 +38,23 @@ DEFAULT_REFRESH_LIFETIME = jwt_settings.REFRESH_TOKEN_LIFETIME
 @extend_schema_view(**auth_schema)
 class AuthViewSet(viewsets.GenericViewSet):
     permission_classes = [AllowAny]
+
+    THROTTLED_ACTIONS = {
+        "register",
+        "login",
+        "forgot_password",
+        "verify_code",
+        "reset_password",
+        "verify_email",
+        "resend_verification",
+        "refresh",
+    }
+
+    def get_throttles(self):
+        if self.action in self.THROTTLED_ACTIONS:
+            self.throttle_scope = self.action
+            return [ScopedRateThrottle()]
+        return []
 
     def get_permissions(self):
         if self.action is None or self.action in (

@@ -222,6 +222,17 @@ REST_FRAMEWORK = {
         "djangorestframework_camel_case.render.CamelCaseJSONRenderer",
         "djangorestframework_camel_case.render.CamelCaseBrowsableAPIRenderer",
     ),
+    "DEFAULT_THROTTLE_RATES": {
+        "register": "10/hour",
+        "login": "5/min",
+        "forgot_password": "3/hour",
+        "verify_code": "5/min",
+        "reset_password": "5/min",
+        "verify_email": "5/min",
+        "resend_verification": "3/hour",
+        "refresh": "10/min",
+    },
+    "NUM_PROXIES": int(os.environ.get("NUM_PROXIES", 1)),
 }
 
 if not DEBUG:
@@ -260,6 +271,21 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:3000",
     "http://127.0.0.1:3001",
 ]
+
+REDIS_URL = os.environ.get("REDIS_URL")
+if REDIS_URL:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": REDIS_URL,
+        }
+    }
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        }
+    }
 
 CORS_ALLOW_HEADERS = (*default_headers, "idempotency-key")
 CORS_EXPOSE_HEADERS = ["Idempotent-Replayed"]
