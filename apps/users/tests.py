@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -97,3 +98,21 @@ class LoginTest(APITestCase):
         )
         self.assertEqual(me_response.status_code, status.HTTP_200_OK)
         self.assertEqual(me_response.data["email"], self.email)
+
+
+class LoginThrottleTests(APITestCase):
+    def setUp(self):
+        cache.clear()
+
+    def test_login_is_throttled(self):
+        url = reverse("auth-login")
+        payload = {"email": "a@gmail.com", "password": "Spiderman98@"}
+
+        for _ in range(5):
+            self.client.post(url, payload)
+
+        res = self.client.post(url, payload)
+
+        self.assertEqual(res.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+        self.assertIn("Retry-After", res)
+        self.assertIn("retry_after", res.data)
