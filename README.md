@@ -1,230 +1,343 @@
 # CraftCV Backend
 
-Backend for CraftCV, a web application that helps individuals build a seamless CV.
+CraftCV is a Django REST API for account management and CV creation. Users can maintain reusable career details, select a template, and assemble one or more CVs from their saved sections.
 
-The stack is **Python / Django 6.1** with **Django REST Framework**, OpenAPI
-schema generation via **drf-spectacular**, and **django-debug-toolbar** for
-local development.
+## Contents
 
-> **Status:** project scaffold only. `apps/users` and `apps/cv_builder` are
-> registered and wired into settings, but contain no models, serializers,
-> views, or routes yet. The only routes that exist today are Django admin and
-> the API documentation endpoints listed below.
+- [Technology](#technology)
+- [Architecture](#architecture)
+- [Local setup](#local-setup)
+- [Run with Docker Compose](#run-with-docker-compose)
+- [API overview](#api-overview)
+- [Typical usage](#typical-usage)
+- [API conventions](#api-conventions)
+- [Quality checks](#quality-checks)
+- [Project layout](#project-layout)
 
-## Requirements
+## Technology
 
-- Python 3.12 (the version CI runs and the linter targets)
-- pip and `venv`
-- PostgreSQL 17 for a full local stack, or Docker to run it through
-  `compose.yaml`
+- Python 3.12
+- Django 6.1 and Django REST Framework
+- PostgreSQL for the Docker development stack; SQLite can be used for a lightweight local setup
+- Simple JWT for access tokens and refresh-token cookies
+- drf-spectacular for OpenAPI, Swagger UI, and ReDoc
+- Redis in Docker Compose for Django's cache and request throttling
+- Ruff for linting and formatting
 
-## Getting started
+## Architecture
+
+The Django project is configured in `craftcv/`. The API is split into two domain apps:
+
+- **`apps.users`** owns the custom email-based user model, registration, login, email verification, password reset, and related services.
+- **`apps.cv_builder`** owns templates, personal details, CVs, and reusable CV sections. CV section records belong to a user; a CV links to selected records through many-to-many relationships.
+- **`core`** contains shared API behavior, including the DRF exception handler.
+
+The project uses UUID identifiers for users, CVs, templates, and CV sections. CV and section endpoints require authentication and scope personal records to the current user. Templates are read-only through the API and are populated by data migrations.
+
+## Local setup
+
+### Requirements
+
+- Python 3.12 and pip
+- Git
+- PostgreSQL 17 if using PostgreSQL directly, or Docker Desktop / Docker Engine for the Compose setup
+
+### Create an environment
+
+From the repository root, create and activate a virtual environment.
+
+**macOS / Linux**
 
 ```sh
-git clone <repository-url>
-cd craftcv_backend
+python3.12 -m venv .venv
+source .venv/bin/activate
 ```
 
-Enable the version-controlled Git hooks in `.githooks/` (once per clone). They
-enforce the branch and commit conventions, including the `crf-<ticket-number>`
-reference every branch name must carry — for example
-`feat/crf-3-cv-template-export`:
-
-```sh
-sh scripts/setup-hooks.sh
-```
+**Windows PowerShell**
 
 ```powershell
-.\scripts\setup-hooks.ps1
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
 ```
 
-Create and activate a virtual environment:
+Install project and development dependencies, then create your private environment file:
 
 ```sh
-python -m venv venv
-source venv/bin/activate
-```
-
-```powershell
-python -m venv venv
-.\venv\Scripts\Activate.ps1
-```
-
-Install dependencies and create your local environment file:
-
-```sh
+python -m pip install --upgrade pip
 pip install -r requirements.txt -r requirements-dev.txt
+```
+
+macOS / Linux:
+
+```sh
 cp .env.example .env
 ```
 
-`requirements-dev.txt` holds the tooling the Git hooks need, so install it even
-if you only plan to run the server. Settings are read from `.env` through
-`python-dotenv`; the defaults in `.env.example` use SQLite. Set `SECRET_KEY`
-for anything beyond a throwaway local database. `.env` is git-ignored and must
-never be committed.
+Windows PowerShell:
 
-`.env.example` points at Postgres. If you would rather not run a database
-server, set `DB_ENGINE=django.db.backends.sqlite3` — that is also what the test
-suite and CI use.
+```powershell
+Copy-Item .env.example .env
+```
 
-Apply migrations and start the development server:
+The `.env` file is ignored by Git. Use a private `SECRET_KEY` and do not commit credentials or production secrets.
+
+### Configure a local database
+
+The checked-in `.env.example` is set up for PostgreSQL. For a local PostgreSQL server, make sure its database and user match `DB_NAME`, `DB_USER`, and `DB_PASSWORD` in `.env`; set `DB_HOST` and `DB_PORT` to the values reachable from your host.
+
+To use SQLite instead, set these values in `.env`:
+
+```dotenv
+DB_ENGINE=django.db.backends.sqlite3
+DB_NAME=db.sqlite3
+```
+
+When using SQLite, the other `DB_*` connection fields are not used. SQLite is convenient for development and tests; use PostgreSQL when you need to match the Compose database behavior.
+
+### Configure email
+
+Email verification and password-reset messages use the configured Resend SMTP backend. Set these values in `.env` for real delivery:
+
+```dotenv
+DEFAULT_FROM_EMAIL=CraftCV <verified-sender@example.com>
+RESEND_API_KEY=your-resend-api-key
+```
+
+Without valid mail credentials, the API can still run, but verification and reset emails will not reach users. Email send failures are logged by the application.
+
+### Migrate and start the API
 
 ```sh
 python manage.py migrate
 python manage.py runserver
 ```
 
-## Available endpoints
+The local API is available at <http://127.0.0.1:8000>. `DEBUG=True` in the example environment enables Django's debug toolbar during local development. Do not use debug mode or example credentials in a public deployment.
 
-| Path | Description |
-| --- | --- |
-| `/admin/` | Django admin |
-| `/api/schema/` | OpenAPI schema (download) |
-| `/api/swagger/` | Swagger UI |
-| `/api/redoc/` | ReDoc UI |
+## Run with Docker Compose
 
-### Idempotent section creates
-
-The CV section collection endpoints accept an optional `Idempotency-Key` header
-on `POST` requests. Reuse the same key when retrying the same create request.
-The response is replayed for the same authenticated user, endpoint, and payload;
-reusing a key with a different payload returns `409 Conflict`. Keys expire after
-24 hours. Requests without the header retain normal create behavior.
-
-After a successful create, use the returned section ID with the detail endpoint's
-`PATCH` method for later edits. Generate a new key for each distinct create.
-Expired keys for the current request are removed during `POST`; run
-`python manage.py purge_idempotency_records` periodically to remove other expired
-keys.
-
-The debug toolbar routes are also mounted while `DEBUG` is on.
-
-## Project structure
-
-```text
-craftcv_backend/
-├── apps/                 # Django apps
-│   ├── cv_builder/       # CV creation domain (scaffold)
-│   └── users/            # Accounts and authentication (scaffold)
-├── craftcv/              # Project configuration
-│   ├── settings.py
-│   ├── urls.py
-│   ├── tests.py          # Smoke tests for the project wiring
-│   ├── asgi.py
-│   └── wsgi.py
-├── scripts/              # check.sh, hook installers, convention checks
-├── tests/                # Repository-level tests (the convention rules)
-├── .githooks/            # pre-commit, commit-msg, pre-push
-├── .github/workflows/    # CI and repository-standards
-├── Dockerfile            # Application image (gunicorn)
-├── compose.yaml          # Local stack: app + postgres
-├── manage.py
-├── pyproject.toml        # ruff configuration
-├── requirements.txt
-└── requirements-dev.txt  # Tooling the hooks need
-```
-
-New apps live under `apps/` and are registered in `INSTALLED_APPS` with their
-dotted path (for example `apps.users`).
-
-## Running with Docker
-
-The compose stack is the quickest way to get a real Postgres. It builds the
-image, starts the database, waits for it to be healthy, and mounts the source
-so edits reload without a rebuild:
+Compose starts the Django application, PostgreSQL, and Redis. Create `.env` as described above, then run:
 
 ```sh
 docker compose up --build
+```
+
+In a second terminal, apply migrations:
+
+```sh
 docker compose exec web python manage.py migrate
 ```
 
-The app is then on <http://localhost:8000>. Other things you will want:
+The API is available at <http://127.0.0.1:8000>. Compose publishes PostgreSQL on host port `5142` and connects the web container to the database service internally. The database and Redis data are held in named volumes.
+
+Useful commands:
 
 ```sh
-docker compose exec web python manage.py createsuperuser
-docker compose exec web python manage.py test
-docker compose down            # stop, keeping the database volume
-docker compose down -v         # stop and delete the database
+docker compose logs -f web       # follow application logs
+docker compose exec web python manage.py showmigrations
+docker compose down              # stop containers and keep data volumes
+docker compose down -v           # stop containers and delete database/cache data
 ```
 
-Compose reads the same `.env` the app does, so `DB_NAME`, `DB_USER` and
-`DB_PASSWORD` create the database and configure Django from one place. Set
-`DB_HOST_PORT` or `WEB_PORT` if 5432 or 8000 is already taken. `DB_HOST` is
-fixed to the `db` service inside the network, so the value in your `.env` only
-affects commands you run on the host.
+The Compose web service runs Gunicorn. For live code reloading during development, stop Compose and run Django on the host with `python manage.py runserver` against a reachable database, or adjust the Compose command for your local workflow.
 
-The image runs gunicorn as its default command and compose overrides it with
-`runserver` for development, so the same `Dockerfile` serves both.
+## API overview
+
+All endpoints use the `/api/` prefix and trailing slashes. JSON request and response fields use **camelCase** (for example, `professionalTitle`), while the Python model and serializer fields use snake_case. Authenticated requests use this header:
+
+```http
+Authorization: JWT <access-token>
+```
+
+### Documentation and health of the API surface
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/api/docs/schema/` | Download the OpenAPI schema |
+| `GET` | `/api/docs/swagger/` | Swagger UI |
+| `GET` | `/api/docs/redoc/` | ReDoc UI |
+| `GET` | `/admin/` | Django admin site |
+
+### Authentication
+
+All authentication routes are under `/api/auth/`.
+
+| Method | Path | Auth required | Description |
+| --- | --- | --- | --- |
+| `POST` | `/api/auth/register/` | No | Create an account and send an email verification code |
+| `POST` | `/api/auth/verify-email/` | No | Verify the email with the six-digit code; returns an access token and sets the refresh cookie |
+| `POST` | `/api/auth/resend-verification/` | No | Request a replacement verification code |
+| `POST` | `/api/auth/login/` | No | Log in with email and password; returns an access token and sets the refresh cookie |
+| `POST` | `/api/auth/refresh/` | Refresh cookie | Return a new access token using the `refreshToken` cookie |
+| `POST` | `/api/auth/logout/` | Yes | Blacklist the refresh token, if supplied, and clear its cookie |
+| `GET` | `/api/auth/me/` | Yes | Return the current user's profile |
+| `POST` | `/api/auth/forgot-password/` | No | Request a password-reset code |
+| `POST` | `/api/auth/verify-code/` | No | Check a password-reset code without consuming it |
+| `POST` | `/api/auth/reset-password/` | No | Set a new password using a valid reset code |
+
+Registration request:
+
+```json
+{
+  "email": "person@example.com",
+  "password": "StrongPassword123!",
+  "agreeToTerms": true
+}
+```
+
+Login request:
+
+```json
+{
+  "email": "person@example.com",
+  "password": "StrongPassword123!",
+  "rememberMe": false
+}
+```
+
+Registration returns a message and email address; it does **not** sign the user in. Verify the email, then use the returned access token in the `Authorization` header. The refresh token is stored in an HttpOnly cookie by the API. Browser clients must send requests with credentials enabled when they need that cookie, and the frontend origin must be allowed by the CORS settings.
+
+Login is blocked until the account's email is verified. Password reset responses do not reveal whether an email address has an account. Authentication endpoints have per-action throttling; clients should respect HTTP `429` responses and the `Retry-After` header.
+
+### Templates
+
+Template endpoints require authentication and return the available templates.
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/api/templates/` | List templates |
+| `GET` | `/api/templates/{template_id}/` | Retrieve a template |
+
+Template IDs are UUIDs. The initial migrations seed the built-in templates; query this endpoint and use a returned `templateId` when creating a CV.
+
+### CVs
+
+All CV endpoints require authentication. A user's CV list and detail endpoints only expose that user's CVs.
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/api/cvs/` | List the current user's CVs |
+| `POST` | `/api/cvs/` | Create a CV |
+| `GET` | `/api/cvs/{cv_id}/` | Retrieve a CV |
+| `PATCH` | `/api/cvs/{cv_id}/` | Update CV fields and section selections |
+| `DELETE` | `/api/cvs/{cv_id}/` | Delete a CV |
+| `POST` | `/api/cvs/{cv_id}/duplicate/` | Duplicate a CV and copy its sections |
+
+Example create request (IDs are UUIDs returned by the relevant endpoints):
+
+```json
+{
+  "title": "Backend Engineer",
+  "professionalTitle": "Senior Backend Engineer",
+  "professionalSummary": "Backend developer with experience building APIs.",
+  "template": "<template-uuid>",
+  "educations": ["<education-uuid>"],
+  "experiences": ["<experience-uuid>"],
+  "skills": ["<skill-uuid>"]
+}
+```
+
+Related section IDs must belong to the authenticated user. The `personalDetail` object in CV responses is read-only and reflects the user's current personal details. CV edits update `lastSavedAt`.
+
+### Personal details and reusable sections
+
+These endpoints require authentication. Collection `GET` returns the current user's records; collection `POST` creates one. Detail endpoints support retrieval, partial/full update, and deletion for the current user's record only.
+
+| Resource | Collection | Detail |
+| --- | --- | --- |
+| Personal details | — | `/api/cvs/personal-details/` |
+| Education | `/api/cvs/educations/` | `/api/cvs/educations/{education_id}/` |
+| Experience | `/api/cvs/experiences/` | `/api/cvs/experiences/{experience_id}/` |
+| Skills | `/api/cvs/skills/` | `/api/cvs/skills/{skill_id}/` |
+| Certifications | `/api/cvs/certifications/` | `/api/cvs/certifications/{certification_id}/` |
+| Languages | `/api/cvs/languages/` | `/api/cvs/languages/{language_id}/` |
+| Awards | `/api/cvs/awards/` | `/api/cvs/awards/{award_id}/` |
+| Additional information | `/api/cvs/additional-information/` | `/api/cvs/additional-information/{additional_info_id}/` |
+
+Personal details use `PUT` to create the record when one does not exist or replace it when it does; use `PATCH` for a partial update. Section details support `GET`, `PATCH`, `PUT`, and `DELETE`. `displayOrder` controls a section's ordering in the CV.
+
+## Typical usage
+
+1. Register with an email, password, and `agreeToTerms: true`.
+2. Submit the emailed code to `/api/auth/verify-email/`.
+3. Keep the returned access token in the client and send it as `Authorization: JWT …`. Let the browser retain the HttpOnly refresh cookie; call `/api/auth/refresh/` when the access token expires.
+4. Save personal details and create reusable sections such as education, experience, and skills.
+5. Fetch templates from `/api/templates/` and choose a template UUID.
+6. Create a CV using the template UUID and IDs of the sections to include. Use `PATCH` to update the CV later.
+7. Duplicate a CV when you want an independent copy. Its section records are copied too, so later edits to the copy do not change the original.
+
+### Idempotent section creation
+
+Section collection `POST` endpoints accept an optional `Idempotency-Key` header. This is useful when retrying a request after a network timeout:
+
+```http
+Idempotency-Key: 6d862e4d-4f90-45ba-a153-43fa45a51c65
+```
+
+For the same authenticated user, endpoint, key, and request payload, the API replays the original response and adds `Idempotent-Replayed: true`. Reusing the key with a different payload returns `409 Conflict`. Keys expire after 24 hours. Use a new unique key for every distinct create operation. Requests without this header behave as ordinary creates.
+
+Expired records for a key are cleaned up during a request using that key. To remove other expired records periodically, run:
+
+```sh
+python manage.py purge_idempotency_records
+```
+
+## API conventions
+
+- Send and accept JSON for ordinary API requests. The API's JSON parser and renderer convert field names between camelCase on the wire and snake_case in Python.
+- Use the UUID identifiers returned by the API; do not assume database IDs are sequential integers.
+- `401` means authentication is missing or invalid; `403` means the request is authenticated but not allowed; `404` is also used when a requested CV or section does not belong to the current user.
+- Validation errors return `400`. Authentication throttling returns `429` with retry information. Idempotency payload conflicts return `409`.
+- Successful deletes use HTTP `204 No Content`.
+- CORS defaults allow the configured local frontend origins in `craftcv/settings.py`. Update `CORS_ALLOWED_ORIGINS` for the frontend deployment; do not enable all origins for a credentialed production client.
 
 ## Quality checks
 
-`scripts/check.sh` is the one command that runs every gate. The Git hooks and
-GitHub Actions both call it, so local and CI results cannot drift.
+The shared check script is `scripts/check.sh`:
 
 ```sh
-sh scripts/check.sh lint            # ruff lint + format check
-sh scripts/check.sh tests-required  # staged code must ship with a test
-sh scripts/check.sh build           # django system checks + missing migrations
-sh scripts/check.sh test            # django unit tests
-sh scripts/check.sh all             # lint, build and test
+sh scripts/check.sh lint            # Ruff lint and format checks
+sh scripts/check.sh tests-required  # staged application code must include a test
+sh scripts/check.sh build           # Django checks and missing-migration check
+sh scripts/check.sh test            # Django test suite
+sh scripts/check.sh all             # lint, build, and tests
 ```
 
-It finds `venv/` (or `.venv/`) on its own; set `PYTHON=/path/to/python` to
-override.
-
-When to expect each one:
-
-| Moment | What runs |
-| --- | --- |
-| `git commit` | Branch and subject conventions, whitespace, **lint on staged Python files**, and **a test alongside any staged application code** |
-| `git push` | The same conventions, then **build and unit tests** |
-| Pull request / push to `main`, `develop` | Lint, build, and tests again in GitHub Actions |
-
-Lint runs on commit because it is fast; the slower build and test run once per
-push. Fix lint failures with `python -m ruff check --fix .` and
-`python -m ruff format .`.
-
-A commit that touches application code without staging a test is rejected. Put
-the test in `apps/<app>/tests.py` or `tests/test_*.py` and stage it in the same
-commit. Migrations, `__init__.py`, `apps.py`, `asgi.py`, `wsgi.py`, `manage.py`
-and `craftcv/settings.py` are exempt, and so is anything that is not Python.
-When a change genuinely has nothing to assert, say so out loud with
-`SKIP_TEST_CHECK=1 git commit`.
-
-For an emergency push, `SKIP_PUSH_CHECKS=1 git push` skips the build and tests
-— CI still runs them.
-
-Linter and formatter rules live in `pyproject.toml` (ruff, line length 100).
-
-## Tests
+On Windows, run these commands in Git Bash or another shell that provides `sh`. To run tests directly:
 
 ```sh
 python manage.py test
 ```
 
-`craftcv/tests.py` holds smoke tests for the URL wiring, and `tests/` covers
-the rules the Git hooks enforce: `test_conventions.py` for
-`scripts/validate-conventions.sh` and `test_check_script.py` for the
-tests-required gate. Feature tests belong in the app that owns the behaviour.
-`settings.py` detects test runs and skips loading the debug toolbar.
+Install the repository's Git hooks once per clone if you want the local branch, commit, lint, and test-presence checks:
 
-The convention tests shell out to the script once per case, which is slow on
-Windows (roughly 20 seconds) and quick on Linux. Run a subset with
-`python manage.py test tests` or `python manage.py test craftcv`.
+```sh
+sh scripts/setup-hooks.sh
+```
 
-## Known gaps
+PowerShell alternative:
 
-These are tracked as follow-up work and are intentionally listed here so they
-are not mistaken for finished configuration:
+```powershell
+.\scripts\setup-hooks.ps1
+```
 
-- No dependency lock file: `requirements.txt` pins direct dependencies only.
-- No static type checking.
-- No production settings module; `DEBUG` defaults to off and is turned on
-  through `.env` for local work.
-- The test suite runs on SQLite while the application targets Postgres, so
-  database-specific behaviour is not covered by CI.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for branch naming, commit messages, pull request expectations, and hook behavior.
 
-## Contributing
+## Project layout
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for branch naming, commit message
-format, pull request expectations, and local quality checks.
+```text
+apps/
+  users/                 Accounts, authentication, verification, email services
+  cv_builder/            Templates, CVs, reusable sections, and CV endpoints
+core/                    Shared API exception handling
+craftcv/                 Django settings, root URLs, ASGI and WSGI entry points
+scripts/                 Local checks, hook setup, and convention validation
+tests/                   Repository tooling tests
+.githooks/               Optional local Git hooks
+Dockerfile               Gunicorn application image
+compose.yaml             Local application, PostgreSQL, and Redis services
+buildspec.yml            Build/check pipeline definition
+manage.py                Django management entry point
+requirements.txt         Runtime dependencies
+requirements-dev.txt     Ruff and development tooling
+```
